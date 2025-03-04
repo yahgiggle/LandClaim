@@ -2,12 +2,10 @@ package landclaim;
 
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UIElement;
-import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.UITarget;
+import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
-
-
 
 public class AdminUIMenu {
     private final LandClaim plugin;
@@ -24,19 +22,53 @@ public class AdminUIMenu {
             return;
         }
 
-        // Create the base UI element
+        // Create the base UI element (in-game menu)
         UIElement adminMenu = new UIElement();
         player.addUIElement(adminMenu, UITarget.IngameMenu);
         adminMenu.setSize(200, 65, false);
         adminMenu.setClickable(false);
-        adminMenu.setPosition(20, 10, true);
+        adminMenu.setPosition(20, 5, true); // Main menu position
         adminMenu.setBorderEdgeRadius(5.0f, false);
         adminMenu.setBorder(3);
         adminMenu.setBorderColor(888);
         adminMenu.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
         adminMenu.setVisible(true);
 
-        // Add a Migrate Database button as a UILabel
+        // Add an Admin Tools button as a UILabel
+        UILabel adminToolsButton = new UILabel();
+        adminToolsButton.setClickable(true);
+        adminToolsButton.setText("<b>Admin Tools</b>");
+        adminToolsButton.setFont(Font.Medieval);
+        adminToolsButton.style.textAlign.set(TextAnchor.MiddleCenter);
+        adminToolsButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        adminToolsButton.setFontSize(16);
+        adminToolsButton.setSize(180, 45, false);
+        adminToolsButton.setBorder(2);
+        adminToolsButton.setBorderColor(999);
+        adminToolsButton.setBackgroundColor(500);
+        adminToolsButton.setPosition(10, 10, false);
+        adminToolsButton.style.borderBottomWidth.set(5);
+        adminToolsButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
+        adminToolsButton.hoverStyle.borderBottomWidth.set(5);
+        adminToolsButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
+
+        adminMenu.addChild(adminToolsButton);
+    }
+
+    // Popup UI for admin tools (in IngameMenu target)
+    public void showAdminToolsPopup(Player player) {
+        UIElement popup = new UIElement();
+        player.addUIElement(popup, UITarget.IngameMenu); // Match the main menu target
+        popup.setSize(300, 200, false);
+        popup.setClickable(false);
+        popup.setPosition(30, 80, true); // Adjust to appear below the main menu, avoiding overlap
+        popup.setBorderEdgeRadius(5.0f, false);
+        popup.setBorder(3);
+        popup.setBorderColor(888);
+        popup.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
+        popup.setVisible(true);
+
+        // Add a Migrate Database button
         UILabel migrateButton = new UILabel();
         migrateButton.setClickable(true);
         migrateButton.setText("<b>Migrate Database</b>");
@@ -48,14 +80,34 @@ public class AdminUIMenu {
         migrateButton.setBorder(2);
         migrateButton.setBorderColor(999);
         migrateButton.setBackgroundColor(500);
-        migrateButton.setPosition(10, 10, false);
+        migrateButton.setPosition(60, 50, false);
         migrateButton.style.borderBottomWidth.set(5);
         migrateButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
         migrateButton.hoverStyle.borderBottomWidth.set(5);
         migrateButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
 
-      
-        adminMenu.addChild(migrateButton);
+        popup.addChild(migrateButton);
+
+        // Add an Exit button (X) in the upper-right corner
+        UILabel exitButton = new UILabel();
+        exitButton.setClickable(true);
+        exitButton.setText("<b>X</b>");
+        exitButton.setFont(Font.Medieval);
+        exitButton.style.textAlign.set(TextAnchor.MiddleCenter);
+        exitButton.setFontColor(1.0f, 0.0f, 0.0f, 1.0f); // Red color
+        exitButton.setFontSize(16);
+        exitButton.setSize(30, 30, false);
+        exitButton.setBorder(2);
+        exitButton.setBorderColor(999);
+        exitButton.setBackgroundColor(500);
+        exitButton.setPosition(260, 10, false); // Upper-right corner of 300x200 popup
+        exitButton.style.borderBottomWidth.set(2);
+        exitButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
+        exitButton.hoverStyle.borderBottomWidth.set(2);
+        exitButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
+
+       
+        popup.addChild(exitButton);
     }
 }
 
