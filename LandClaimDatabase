@@ -7,6 +7,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.risingworld.api.objects.Player;
+import net.risingworld.api.ui.UILabel;
 
 public class LandClaimDatabase {
     private final Plugin plugin;
@@ -29,8 +31,8 @@ public class LandClaimDatabase {
         }
 
         // Test connection by creating a test table (optional, can remove after testing)
-        oldDataBase.execute("CREATE TABLE IF NOT EXISTS `testconnection` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
-        System.out.println("[LandClaim] Successfully connected to WorldProtection database and created test table.");
+      //  oldDataBase.execute("CREATE TABLE IF NOT EXISTS `testconnection` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
+      //  System.out.println("[LandClaim] Successfully connected to WorldProtection database and created test table.");
         
         db = plugin.getSQLiteConnection(plugin.getPath() + "/" + worldName + "/database.db");
 
@@ -51,9 +53,14 @@ public class LandClaimDatabase {
         }
     }
 
-    public void migrateAreasFromWorldProtection() {
+    public void migrateAreasFromWorldProtection(Player player) {
+        
+         UILabel FeedBackinfoPanel = (UILabel)player.getAttribute("FeedBackinfoPanel");
+         FeedBackinfoPanel.setText("Migration of Areas Started");
+        
         if (oldDataBase == null) {
             System.out.println("[LandClaim] WorldProtection database not initialized for migration.");
+            FeedBackinfoPanel.setText("[LandClaim] WorldProtection database not initialized for migration!!!");
             return;
         }
 
@@ -145,8 +152,14 @@ public class LandClaimDatabase {
             }
 
             System.out.println("[LandClaim] Migration of Areas from WorldProtection database completed.");
+            
+            FeedBackinfoPanel.setText("Migration of Areas from WorldProtection database completed");
+            player.sendYellMessage("test", 3, true);
+            
         } catch (SQLException ex) {
+            
             System.out.println("[LandClaim] Areas and Guests migration failed: " + ex.getMessage());
+            FeedBackinfoPanel.setText("Areas and Guests migration failed!!!");
             ex.printStackTrace();
         }
     }
@@ -168,6 +181,3 @@ public class LandClaimDatabase {
         return oldDataBase;
     }
 }
-
-
-
