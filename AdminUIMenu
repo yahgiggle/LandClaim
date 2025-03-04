@@ -1,0 +1,61 @@
+package landclaim;
+
+import net.risingworld.api.objects.Player;
+import net.risingworld.api.ui.UIElement;
+import net.risingworld.api.ui.UILabel;
+import net.risingworld.api.ui.UITarget;
+import net.risingworld.api.ui.style.Font;
+import net.risingworld.api.ui.style.TextAnchor;
+
+
+
+public class AdminUIMenu {
+    private final LandClaim plugin;
+    private final AdminTools adminTools;
+
+    public AdminUIMenu(LandClaim plugin, AdminTools adminTools) {
+        this.plugin = plugin;
+        this.adminTools = adminTools;
+    }
+
+    public void showAdminMenu(Player player) {
+        if (!adminTools.isAdmin(player)) {
+            player.sendTextMessage("[#FF0000]You don’t have permission to access the admin menu!");
+            return;
+        }
+
+        // Create the base UI element
+        UIElement adminMenu = new UIElement();
+        player.addUIElement(adminMenu, UITarget.Inventory);
+        adminMenu.setSize(200, 65, false);
+        adminMenu.setClickable(false);
+        adminMenu.setPosition(20, 5, true);
+        adminMenu.setBorderEdgeRadius(5.0f, false);
+        adminMenu.setBorder(3);
+        adminMenu.setBorderColor(888);
+        adminMenu.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
+        adminMenu.setVisible(true);
+
+        // Add a Migrate Database button as a UILabel
+        UILabel migrateButton = new UILabel();
+        migrateButton.setClickable(true);
+        migrateButton.setText("<b>Migrate Database</b>");
+        migrateButton.setFont(Font.Medieval);
+        migrateButton.style.textAlign.set(TextAnchor.MiddleCenter);
+        migrateButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        migrateButton.setFontSize(16);
+        migrateButton.setSize(180, 45, false);
+        migrateButton.setBorder(2);
+        migrateButton.setBorderColor(999);
+        migrateButton.setBackgroundColor(500);
+        migrateButton.setPosition(10, 10, false);
+        migrateButton.style.borderBottomWidth.set(5);
+        migrateButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
+        migrateButton.hoverStyle.borderBottomWidth.set(5);
+        migrateButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
+
+      
+        adminMenu.addChild(migrateButton);
+    }
+}
+
