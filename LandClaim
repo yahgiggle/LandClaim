@@ -30,11 +30,13 @@ public class LandClaim extends Plugin implements Listener {
     }
 
     
-            @EventMethod
-  public void onPlayerConnect(PlayerConnectEvent event) throws SQLException  {
-  Player player = event.getPlayer();  
-  adminUIMenu.showAdminMenu(player); 
-  }
+   @EventMethod
+public void onPlayerConnect(PlayerConnectEvent event) throws SQLException {
+    Player player = event.getPlayer();
+    if (adminTools.isAdmin(player)) {
+        adminUIMenu.showAdminMenu(player);
+    }
+}
     
 
     @Override
