@@ -5,7 +5,9 @@ import net.risingworld.api.World;
 import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.EventMethod;
 import java.sql.SQLException;
+import net.risingworld.api.events.player.PlayerConnectEvent;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
+import net.risingworld.api.objects.Player;
 
 public class LandClaim extends Plugin implements Listener {
     private LandClaimDatabase database;
@@ -22,8 +24,18 @@ public class LandClaim extends Plugin implements Listener {
         adminTools = new AdminTools(this);
         adminUIMenu = new AdminUIMenu(this, adminTools);
         adminClicks = new AdminOnClickButtons(this, adminTools); // Initialize here
+        
+        
         registerEventListener(this); // Single listener registration
     }
+
+    
+            @EventMethod
+  public void onPlayerConnect(PlayerConnectEvent event) throws SQLException  {
+  Player player = event.getPlayer();  
+  adminUIMenu.showAdminMenu(player); 
+  }
+    
 
     @Override
     public void onDisable() {
@@ -43,3 +55,5 @@ public class LandClaim extends Plugin implements Listener {
         adminClicks.onPlayerUIElementClick(event);
     }
 }
+
+
