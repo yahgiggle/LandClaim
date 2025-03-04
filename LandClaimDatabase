@@ -11,6 +11,7 @@ import java.util.logging.Logger;
 public class LandClaimDatabase {
     private final Plugin plugin;
     private Database db;
+    private Database oldDataBase; // Renamed for clarity
 
     public LandClaimDatabase(Plugin plugin) {
         this.plugin = plugin;
@@ -19,10 +20,23 @@ public class LandClaimDatabase {
     public void initialize() {
         System.out.println("-- LandClaim Database Loaded --");
         String worldName = World.getName();
+        
+        // Initialize connection to WorldProtection database using your path
+        oldDataBase = plugin.getSQLiteConnection("Plugins/WorldProtection/" + worldName + "/database.db");
+        if (oldDataBase == null) {
+            System.out.println("[LandClaim] Could not connect to WorldProtection database at: Plugins/WorldProtection/" + worldName + "/database.db");
+            return;
+        }
+
+        // Test connection by creating a test table (optional, can remove after testing)
+        oldDataBase.execute("CREATE TABLE IF NOT EXISTS `testconnection` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
+        System.out.println("[LandClaim] Successfully connected to WorldProtection database and created test table.");
+        
         db = plugin.getSQLiteConnection(plugin.getPath() + "/" + worldName + "/database.db");
 
-        // Create core tables if they don’t exist
-        db.execute("CREATE TABLE IF NOT EXISTS `Areas` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaOwnerName` VARCHAR(64), `AreaName` VARCHAR(64), `AreaGuest` VARCHAR(64), `AreaX` INTEGER, `AreaY` INTEGER, `AreaZ` INTEGER, `PlayerUID` BIGINT);");
+        // Create core tables if they don’t exist, excluding AreaGuest, adding Guests
+        db.execute("CREATE TABLE IF NOT EXISTS `Areas` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaOwnerName` VARCHAR(64), `AreaName` VARCHAR(64), `AreaX` INTEGER, `AreaY` INTEGER, `AreaZ` INTEGER, `PlayerUID` BIGINT, `AreaLocked` BOOLEAN DEFAULT 0, `PVPStatus` BOOLEAN DEFAULT 0, `CreationDate` DATE);");
+        db.execute("CREATE TABLE IF NOT EXISTS `Guests` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaID` INTEGER, `GuestName` VARCHAR(64), `PlayerUID` BIGINT, FOREIGN KEY (AreaID) REFERENCES Areas(ID));");
         db.execute("CREATE TABLE IF NOT EXISTS `Points` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `UserName` VARCHAR(64), `Points` INTEGER, `PlayerUID` BIGINT);");
         db.execute("CREATE TABLE IF NOT EXISTS `AdminSettings` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `PointsEarnedAdjust` INTEGER, `AreaCostAdjust` INTEGER);");
         db.execute("CREATE TABLE IF NOT EXISTS `DataBaseVersion` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
@@ -37,14 +51,123 @@ public class LandClaimDatabase {
         }
     }
 
+    public void migrateAreasFromWorldProtection() {
+        if (oldDataBase == null) {
+            System.out.println("[LandClaim] WorldProtection database not initialized for migration.");
+            return;
+        }
+
+        try {
+            // Check if optional/new columns exist in WorldProtection’s Areas table
+            boolean hasCreationDate = false, hasAreaLocked = false, hasPVPStatus = false;
+            boolean hasAreaGuest = false; // Check for AreaGuest to migrate to Guests table
+            ResultSet columns = oldDataBase.executeQuery("PRAGMA table_info(`Areas`)");
+            while (columns.next()) {
+                String columnName = columns.getString("name");
+                if ("CreationDate".equals(columnName)) hasCreationDate = true;
+                if ("AreaLocked".equals(columnName)) hasAreaLocked = true;
+                if ("PVPStatus".equals(columnName)) hasPVPStatus = true;
+                if ("AreaGuest".equals(columnName)) hasAreaGuest = true;
+            }
+
+            // Migrate Areas table (core fields, excluding AreaGuest)
+            String selectSql = "SELECT ID, AreaOwnerName, AreaName, AreaX, AreaY, AreaZ, PlayerUID";
+            if (hasCreationDate) selectSql += ", CreationDate";
+            if (hasAreaLocked) selectSql += ", AreaLocked";
+            if (hasPVPStatus) selectSql += ", PVPStatus";
+            selectSql += " FROM `Areas`";
+
+            ResultSet areasRs = oldDataBase.executeQuery(selectSql);
+            while (areasRs.next()) {
+                int id = areasRs.getInt("ID");
+                String areaOwnerName = areasRs.getString("AreaOwnerName");
+                String areaName = areasRs.getString("AreaName");
+                int areaX = areasRs.getInt("AreaX");
+                int areaY = areasRs.getInt("AreaY");
+                int areaZ = areasRs.getInt("AreaZ");
+                long playerUID = areasRs.getLong("PlayerUID");
+
+                // Check if this area exists in LandClaim’s Areas table
+                ResultSet existing = db.executeQuery("SELECT ID FROM `Areas` WHERE ID = " + id);
+                if (!existing.next()) {
+                    // Insert new area into LandClaim’s Areas table with default values for new columns
+                    String insertSql = "INSERT INTO `Areas` (ID, AreaOwnerName, AreaName, AreaX, AreaY, AreaZ, PlayerUID, AreaLocked, PVPStatus, CreationDate) " +
+                        "VALUES (" + id + ", '" + areaOwnerName + "', '" + areaName + "', " +
+                        areaX + ", " + areaY + ", " + areaZ + ", " + playerUID + ", 0, 0, NULL)"; // Defaults: FALSE for BOOLEAN, NULL for DATE
+                    db.executeUpdate(insertSql);
+                }
+
+                // Migrate additional columns if they exist
+                String updateSql = "UPDATE `Areas` SET ";
+                boolean hasUpdates = false;
+                if (hasCreationDate) {
+                    String creationDate = areasRs.getString("CreationDate"); // Handle as DATE string
+                    if (creationDate != null) {
+                        updateSql += "CreationDate = '" + creationDate + "'";
+                        hasUpdates = true;
+                    }
+                }
+                if (hasAreaLocked) {
+                    if (hasUpdates) updateSql += ", ";
+                    int areaLocked = areasRs.getInt("AreaLocked"); // 0 = FALSE, 1 = TRUE
+                    updateSql += "AreaLocked = " + (areaLocked != 0);
+                    hasUpdates = true;
+                }
+                if (hasPVPStatus) {
+                    if (hasUpdates) updateSql += ", ";
+                    int pvpStatus = areasRs.getInt("PVPStatus"); // 0 = FALSE, 1 = TRUE
+                    updateSql += "PVPStatus = " + (pvpStatus != 0);
+                    hasUpdates = true;
+                }
+                if (hasUpdates) {
+                    updateSql += " WHERE ID = " + id;
+                    db.executeUpdate(updateSql);
+                }
+            }
+
+            // Migrate Guests data from WorldProtection’s Areas table if AreaGuest exists
+            if (hasAreaGuest) {
+                ResultSet guestsRs = oldDataBase.executeQuery("SELECT ID, AreaGuest FROM `Areas` WHERE AreaGuest IS NOT NULL AND AreaGuest != ''");
+                while (guestsRs.next()) {
+                    int areaId = guestsRs.getInt("ID");
+                    String guestName = guestsRs.getString("AreaGuest");
+                    // Assume PlayerUID is the same as the area’s PlayerUID or derive it (simplified here)
+                    long playerUID = 0; // Default, or query from Areas if needed
+
+                    // Check if this guest exists for the area in LandClaim’s Guests table
+                    ResultSet existingGuest = db.executeQuery("SELECT ID FROM `Guests` WHERE AreaID = " + areaId + " AND GuestName = '" + guestName + "'");
+                    if (!existingGuest.next()) {
+                        db.executeUpdate("INSERT INTO `Guests` (AreaID, GuestName, PlayerUID) " +
+                            "VALUES (" + areaId + ", '" + guestName + "', " + playerUID + ")");
+                    }
+                }
+                System.out.println("[LandClaim] Migration of Guests from WorldProtection database completed.");
+            }
+
+            System.out.println("[LandClaim] Migration of Areas from WorldProtection database completed.");
+        } catch (SQLException ex) {
+            System.out.println("[LandClaim] Areas and Guests migration failed: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+    }
+
     public void close() {
         if (db != null) {
             db.close();
+        }
+        if (oldDataBase != null) {
+            oldDataBase.close();
         }
     }
 
     public Database getDb() {
         return db;
     }
+
+    public Database getOldDataBase() {
+        return oldDataBase;
+    }
 }
+
+
 
