@@ -26,10 +26,10 @@ public class AdminUIMenu {
 
         // Create the base UI element
         UIElement adminMenu = new UIElement();
-        player.addUIElement(adminMenu, UITarget.Inventory);
+        player.addUIElement(adminMenu, UITarget.IngameMenu);
         adminMenu.setSize(200, 65, false);
         adminMenu.setClickable(false);
-        adminMenu.setPosition(20, 5, true);
+        adminMenu.setPosition(20, 10, true);
         adminMenu.setBorderEdgeRadius(5.0f, false);
         adminMenu.setBorder(3);
         adminMenu.setBorderColor(888);
