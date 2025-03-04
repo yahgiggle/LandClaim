@@ -37,9 +37,9 @@ public class AdminOnClickButtons extends LandClaim{
         
         player.setMouseCursorVisible(false);
     } else if (element != null && element.getText().equals("<b>Migrate old WP Database</b>")) {
-        adminTools.migrateDatabase();
-        FeedBackinfoPanel.setText("Database migration triggered!");
-        player.sendTextMessage("Button Test 1");
+        adminTools.migrateDatabase(player);
+      //  FeedBackinfoPanel.setText("Database migration triggered!");
+      //  player.sendTextMessage("Button Test 1");
     }
          
     }
@@ -47,11 +47,3 @@ public class AdminOnClickButtons extends LandClaim{
          
    
 }
-    
-    
-    
-
-
-
-
-
