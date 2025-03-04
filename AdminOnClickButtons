@@ -21,6 +21,8 @@ public class AdminOnClickButtons extends LandClaim{
           
     Player player = event.getPlayer();
     UILabel element = (UILabel) event.getUIElement();
+    UILabel FeedBackinfoPanel = (UILabel)player.getAttribute("FeedBackinfoPanel");
+    
     
     
     if (element != null && element.getText().equals("<b>Admin Tools</b>")) {
@@ -34,9 +36,10 @@ public class AdminOnClickButtons extends LandClaim{
         ThisParent.setVisible(false);
         
         player.setMouseCursorVisible(false);
-    } else if (element != null && element.getText().equals("<b>Migrate Database</b>")) {
+    } else if (element != null && element.getText().equals("<b>Migrate old WP Database</b>")) {
         adminTools.migrateDatabase();
-        player.sendTextMessage("[#00FF00]Database migration triggered!");
+        FeedBackinfoPanel.setText("Database migration triggered!");
+        player.sendTextMessage("Button Test 1");
     }
          
     }
