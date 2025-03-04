@@ -1,0 +1,40 @@
+package landclaim;
+
+import net.risingworld.api.objects.Player;
+import net.risingworld.api.Plugin;
+
+public class AdminTools {
+    private final LandClaim plugin;
+
+    public AdminTools(LandClaim plugin) {
+        this.plugin = plugin;
+    }
+
+    // Check if a player is an admin
+    public boolean isAdmin(Player player) {
+        return player.isAdmin(); // Simple and direct—true if admin, false if not
+    }
+
+    // Migrate database by adding missing columns from old WorldProtection Areas table
+    public void migrateDatabase() {
+        LandClaimDatabase db = plugin.getDatabase();
+        if (db == null || db.getDb() == null) {
+            System.out.println("[LandClaim] Database not initialized for migration.");
+            return;
+        }
+
+        try {
+            // Example: Add CreationDate if it doesn’t exist
+            db.getDb().execute("ALTER TABLE `Areas` ADD COLUMN IF NOT EXISTS `CreationDate` BIGINT");
+            db.getDb().execute("ALTER TABLE `Areas` ADD COLUMN IF NOT EXISTS `AreaLocked` INTEGER");
+            db.getDb().execute("ALTER TABLE `Areas` ADD COLUMN IF NOT EXISTS `ChestLocked` INTEGER");
+            db.getDb().execute("ALTER TABLE `Areas` ADD COLUMN IF NOT EXISTS `DoorsLocked` INTEGER");
+            db.getDb().execute("ALTER TABLE `Areas` ADD COLUMN IF NOT EXISTS `PVPStatus` INTEGER");
+
+            System.out.println("[LandClaim] Database migration completed.");
+        } catch (Exception e) {
+            System.out.println("[LandClaim] Database migration failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
