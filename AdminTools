@@ -16,13 +16,15 @@ public class AdminTools {
     }
 
     // Migrate only Areas table from WorldProtection for testing
-    public void migrateDatabase() {
+    public void migrateDatabase(Player player) {
         LandClaimDatabase db = plugin.getDatabase();
         if (db == null) {
             System.out.println("[LandClaim] Database not initialized for migration.");
+            
             return;
         }
 
-        db.migrateAreasFromWorldProtection();
+        db.migrateAreasFromWorldProtection(player);
     }
 }
+
