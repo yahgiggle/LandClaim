@@ -1,0 +1,45 @@
+package landclaim;
+
+import net.risingworld.api.Plugin;
+import net.risingworld.api.World;
+import net.risingworld.api.events.Listener;
+import net.risingworld.api.events.EventMethod;
+import java.sql.SQLException;
+import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
+
+public class LandClaim extends Plugin implements Listener {
+    private LandClaimDatabase database;
+    private AdminTools adminTools;
+    private AdminUIMenu adminUIMenu;
+    private AdminOnClickButtons adminClicks; // This is already created in onEnable
+
+    @Override
+    public void onEnable() {
+        String worldName = World.getName();
+        System.out.println("-- LandClaim PLUGIN ENABLED --");
+        database = new LandClaimDatabase(this);
+        database.initialize();
+        adminTools = new AdminTools(this);
+        adminUIMenu = new AdminUIMenu(this, adminTools);
+        adminClicks = new AdminOnClickButtons(this, adminTools); // Initialize here
+        registerEventListener(this); // Single listener registration
+    }
+
+    @Override
+    public void onDisable() {
+        System.out.println("-- LandClaim PLUGIN DISABLED --");
+        if (database != null) {
+            database.close();
+        }
+    }
+
+    public LandClaimDatabase getDatabase() {
+        return database;
+    }
+
+    @EventMethod
+    public void onPlayerUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
+        // Use the existing adminClicks instance instead of creating a new one
+        adminClicks.onPlayerUIElementClick(event);
+    }
+}
