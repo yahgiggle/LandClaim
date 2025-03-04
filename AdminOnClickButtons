@@ -4,6 +4,7 @@ import net.risingworld.api.events.EventMethod;
 import net.risingworld.api.objects.Player;
 import java.sql.SQLException;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
+import net.risingworld.api.ui.UIElement;
 import net.risingworld.api.ui.UILabel;
 
 public class AdminOnClickButtons extends LandClaim{
@@ -17,16 +18,36 @@ public class AdminOnClickButtons extends LandClaim{
 
     @EventMethod
     public void onPlayerUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
-        Player player = event.getPlayer();
-        UILabel element = (UILabel) event.getUIElement();
-                        
-        if (element != null && element.getText().equals("<b>Migrate Database</b>")) {
-            adminTools.migrateDatabase();
-            player.sendTextMessage("[#00FF00]Database migration triggered!");
-        }
-        // Add more button checks here later
+          
+    Player player = event.getPlayer();
+    UILabel element = (UILabel) event.getUIElement();
+    
+    
+    if (element != null && element.getText().equals("<b>Admin Tools</b>")) {
+        AdminUIMenu adminMenu = new AdminUIMenu(this, adminTools); // Re-use existing menu
+        adminMenu.showAdminToolsPopup(player);
+        player.setMouseCursorVisible(true);
+    } else if (element != null && element.getText().equals("<b>X</b>")) {
+        
+        element.setVisible(false); // Hide the clicked element (popup or button)
+        UIElement ThisParent = element.getParent();
+        ThisParent.setVisible(false);
+        
+        player.setMouseCursorVisible(false);
+    } else if (element != null && element.getText().equals("<b>Migrate Database</b>")) {
+        adminTools.migrateDatabase();
+        player.sendTextMessage("[#00FF00]Database migration triggered!");
     }
+         
+    }
+    
+         
+   
 }
+    
+    
+    
+
 
 
 
