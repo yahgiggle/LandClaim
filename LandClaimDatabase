@@ -1,0 +1,50 @@
+package landclaim;
+
+import net.risingworld.api.Plugin;
+import net.risingworld.api.World;
+import net.risingworld.api.database.Database;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+public class LandClaimDatabase {
+    private final Plugin plugin;
+    private Database db;
+
+    public LandClaimDatabase(Plugin plugin) {
+        this.plugin = plugin;
+    }
+
+    public void initialize() {
+        System.out.println("-- LandClaim Database Loaded --");
+        String worldName = World.getName();
+        db = plugin.getSQLiteConnection(plugin.getPath() + "/" + worldName + "/database.db");
+
+        // Create core tables if they don’t exist
+        db.execute("CREATE TABLE IF NOT EXISTS `Areas` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaOwnerName` VARCHAR(64), `AreaName` VARCHAR(64), `AreaGuest` VARCHAR(64), `AreaX` INTEGER, `AreaY` INTEGER, `AreaZ` INTEGER, `PlayerUID` BIGINT);");
+        db.execute("CREATE TABLE IF NOT EXISTS `Points` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `UserName` VARCHAR(64), `Points` INTEGER, `PlayerUID` BIGINT);");
+        db.execute("CREATE TABLE IF NOT EXISTS `AdminSettings` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `PointsEarnedAdjust` INTEGER, `AreaCostAdjust` INTEGER);");
+        db.execute("CREATE TABLE IF NOT EXISTS `DataBaseVersion` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
+
+        // Check version and insert default if missing
+        try (ResultSet result = db.executeQuery("SELECT * FROM `DataBaseVersion` WHERE ID = '1'")) {
+            if (!result.next()) {
+                db.executeUpdate("INSERT INTO `DataBaseVersion` (Version) VALUES ('0');");
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(LandClaimDatabase.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void close() {
+        if (db != null) {
+            db.close();
+        }
+    }
+
+    public Database getDb() {
+        return db;
+    }
+}
+
