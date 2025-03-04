@@ -27,7 +27,7 @@ public class AdminUIMenu {
         player.addUIElement(adminMenu, UITarget.IngameMenu);
         adminMenu.setSize(200, 65, false);
         adminMenu.setClickable(false);
-        adminMenu.setPosition(20, 5, true); // Main menu position
+        adminMenu.setPosition(20, 10, true); // Main menu position
         adminMenu.setBorderEdgeRadius(5.0f, false);
         adminMenu.setBorder(3);
         adminMenu.setBorderColor(888);
@@ -57,36 +57,58 @@ public class AdminUIMenu {
 
     // Popup UI for admin tools (in IngameMenu target)
     public void showAdminToolsPopup(Player player) {
+        
         UIElement popup = new UIElement();
         player.addUIElement(popup, UITarget.IngameMenu); // Match the main menu target
-        popup.setSize(300, 200, false);
+        popup.setSize(800, 600, false);
         popup.setClickable(false);
-        popup.setPosition(30, 80, true); // Adjust to appear below the main menu, avoiding overlap
+        popup.setPosition(30, 20, true); // Adjust to appear below the main menu, avoiding overlap
         popup.setBorderEdgeRadius(5.0f, false);
         popup.setBorder(3);
         popup.setBorderColor(888);
-        popup.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
+        popup.setBackgroundColor(0.9f, 0.9f, 0.9f, 0.9f);
         popup.setVisible(true);
 
+        
+        
+         // Add a FeedBackinfoPanel Text 
+        UILabel FeedBackinfoPanel = new UILabel();
+        FeedBackinfoPanel.setClickable(false);
+        FeedBackinfoPanel.setText("Info");
+        FeedBackinfoPanel.setFont(Font.Medieval);
+        FeedBackinfoPanel.style.textAlign.set(TextAnchor.MiddleCenter);
+        FeedBackinfoPanel.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        FeedBackinfoPanel.setFontSize(16);
+        FeedBackinfoPanel.setSize(730, 45, false);
+        FeedBackinfoPanel.setBorder(2);
+        FeedBackinfoPanel.setBorderColor(999);
+        FeedBackinfoPanel.setBackgroundColor(500);
+        FeedBackinfoPanel.setPosition(10, 5, false);
+        player.setAttribute("FeedBackinfoPanel", FeedBackinfoPanel);
+        popup.addChild(FeedBackinfoPanel);
+        
+        
+        
         // Add a Migrate Database button
         UILabel migrateButton = new UILabel();
         migrateButton.setClickable(true);
-        migrateButton.setText("<b>Migrate Database</b>");
+        migrateButton.setText("<b>Migrate old WP Database</b>");
         migrateButton.setFont(Font.Medieval);
         migrateButton.style.textAlign.set(TextAnchor.MiddleCenter);
         migrateButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
         migrateButton.setFontSize(16);
-        migrateButton.setSize(180, 45, false);
+        migrateButton.setSize(250, 45, false);
         migrateButton.setBorder(2);
         migrateButton.setBorderColor(999);
         migrateButton.setBackgroundColor(500);
-        migrateButton.setPosition(60, 50, false);
+        migrateButton.setPosition(10, 60, false);
         migrateButton.style.borderBottomWidth.set(5);
         migrateButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
         migrateButton.hoverStyle.borderBottomWidth.set(5);
         migrateButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
 
         popup.addChild(migrateButton);
+        
 
         // Add an Exit button (X) in the upper-right corner
         UILabel exitButton = new UILabel();
@@ -95,18 +117,17 @@ public class AdminUIMenu {
         exitButton.setFont(Font.Medieval);
         exitButton.style.textAlign.set(TextAnchor.MiddleCenter);
         exitButton.setFontColor(1.0f, 0.0f, 0.0f, 1.0f); // Red color
-        exitButton.setFontSize(16);
-        exitButton.setSize(30, 30, false);
+        exitButton.setFontSize(18);
+        exitButton.setSize(45, 45, false);
         exitButton.setBorder(2);
         exitButton.setBorderColor(999);
         exitButton.setBackgroundColor(500);
-        exitButton.setPosition(260, 10, false); // Upper-right corner of 300x200 popup
+        exitButton.setPosition(745, 5, false); // Upper-right corner of 300x200 popup
         exitButton.style.borderBottomWidth.set(2);
         exitButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
         exitButton.hoverStyle.borderBottomWidth.set(2);
         exitButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
 
-       
         popup.addChild(exitButton);
     }
 }
