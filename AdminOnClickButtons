@@ -1,0 +1,33 @@
+package landclaim;
+
+import net.risingworld.api.events.EventMethod;
+import net.risingworld.api.objects.Player;
+import java.sql.SQLException;
+import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
+import net.risingworld.api.ui.UILabel;
+
+public class AdminOnClickButtons extends LandClaim{
+    private final LandClaim plugin;
+    private final AdminTools adminTools;
+
+    public AdminOnClickButtons(LandClaim plugin, AdminTools adminTools) {
+        this.plugin = plugin;
+        this.adminTools = adminTools;
+    }
+
+    @EventMethod
+    public void onPlayerUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
+        Player player = event.getPlayer();
+        UILabel element = (UILabel) event.getUIElement();
+                        
+        if (element != null && element.getText().equals("<b>Migrate Database</b>")) {
+            adminTools.migrateDatabase();
+            player.sendTextMessage("[#00FF00]Database migration triggered!");
+        }
+        // Add more button checks here later
+    }
+}
+
+
+
+
