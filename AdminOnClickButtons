@@ -34,9 +34,9 @@ public class AdminOnClickButtons extends LandClaim {
             player.setMouseCursorVisible(false);
         } else if (element != null && element.getText().equals("<b>Migrate old WP Database</b>")) {
             adminTools.migrateDatabase(player);
-            if (FeedBackinfoPanel != null) {
-                FeedBackinfoPanel.setText("Database migration triggered!");
-            }
+         //   if (FeedBackinfoPanel != null) {
+         //       FeedBackinfoPanel.setText("Database migration triggered!");  // we dont need this anymore
+         //   }
         } else if (element != null && element.getText().equals("<b>+ MaxAreaAllocation</b>")) {
             handleMaxAreaAdjustment(player, 1, FeedBackinfoPanel);
         } else if (element != null && element.getText().equals("<b>- MaxAreaAllocation</b>")) {
@@ -73,3 +73,4 @@ public class AdminOnClickButtons extends LandClaim {
         plugin.registerEventListener(this);
     }
 }
+
