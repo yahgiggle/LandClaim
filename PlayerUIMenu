@@ -29,14 +29,14 @@ public class PlayerUIMenu {
     private void setupBaseMenu() {
         menuBase = new UIElement();
         player.addUIElement(menuBase);
-        menuBase.setSize(200, 365, false); // Fits all 5 buttons
+        menuBase.setSize(200, 365, false);
         menuBase.setClickable(false);
         menuBase.setPosition(45, 45, true);
         
         menuBase.setBorderEdgeRadius(5.0f, false);
         menuBase.setBorder(3);
         menuBase.setBorderColor(888);
-        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
+        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f);
         menuBase.setVisible(false);
 
         initClaimButton();
@@ -86,13 +86,11 @@ public class PlayerUIMenu {
     public void initShowMyAreasLabel() {
         showMyAreasLabel = createButton(10, 110, 180, 45, "Show My Areas\nOff");
         showMyAreasLabel.setVisible(true);
-        System.out.println("Adding Show My Areas label for " + player.getName());
     }
 
     public void initShowAllAreasLabel() {
         showAllAreasLabel = createButton(10, 160, 180, 45, "Show All Areas\nOff");
         showAllAreasLabel.setVisible(true);
-        System.out.println("Adding Show All Areas label for " + player.getName());
     }
 
     public UILabel getClaimButton() {
@@ -133,14 +131,33 @@ public class PlayerUIMenu {
 
     public void toggleMyAreas() {
         showingMyAreas = !showingMyAreas;
-        showMyAreasLabel.setText("Show My Areas\n" + (showingMyAreas ? "On" : "Off"));
-        plugin.showMyAreas(showingMyAreas, player);
+        if (showingMyAreas) {
+            showingAllAreas = false; // Turn off Show All Areas
+            plugin.showMyAreas(true, player);
+            plugin.showAllAreas(false, player);
+			plugin.showMyAreas(showingMyAreas, player);  // maybe it need this
+        } else {
+            plugin.showMyAreas(false, player);
+        }
+        updateLabels();
     }
 
     public void toggleAllAreas() {
         showingAllAreas = !showingAllAreas;
+        if (showingAllAreas) {
+            showingMyAreas = false; // Turn off Show My Areas
+            plugin.showAllAreas(true, player);
+            plugin.showMyAreas(false, player);
+			plugin.showAllAreas(showingAllAreas, player); // maybe it need this
+        } else {
+            plugin.showAllAreas(false, player);
+        }
+        updateLabels();
+    }
+
+    private void updateLabels() {
+        showMyAreasLabel.setText("Show My Areas\n" + (showingMyAreas ? "On" : "Off"));
         showAllAreasLabel.setText("Show All Areas\n" + (showingAllAreas ? "On" : "Off"));
-        plugin.showAllAreas(showingAllAreas, player);
     }
 }
 
