@@ -1,5 +1,6 @@
 package landclaim;
 
+import java.sql.SQLException;
 import net.risingworld.api.events.EventMethod;
 import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
@@ -15,7 +16,7 @@ public class PlayerOnClickButtons implements Listener {
     }
 
     @EventMethod
-    public void onUIElementClick(PlayerUIElementClickEvent event) {
+    public void onUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
         Player player = event.getPlayer();
         PlayerUIMenu menu = plugin.playerMenus.get(player);
 
@@ -44,3 +45,4 @@ public class PlayerOnClickButtons implements Listener {
         plugin.registerEventListener(this);
     }
 }
+
