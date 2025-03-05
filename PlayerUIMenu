@@ -143,3 +143,4 @@ public class PlayerUIMenu {
         plugin.showAllAreas(showingAllAreas, player);
     }
 }
+
