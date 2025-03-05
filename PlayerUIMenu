@@ -135,7 +135,7 @@ public class PlayerUIMenu {
             showingAllAreas = false; // Turn off Show All Areas
             plugin.showMyAreas(true, player);
             plugin.showAllAreas(false, player);
-			plugin.showMyAreas(showingMyAreas, player);  // maybe it need this
+	    plugin.showMyAreas(showingMyAreas, player);  
         } else {
             plugin.showMyAreas(false, player);
         }
@@ -148,7 +148,7 @@ public class PlayerUIMenu {
             showingMyAreas = false; // Turn off Show My Areas
             plugin.showAllAreas(true, player);
             plugin.showMyAreas(false, player);
-			plugin.showAllAreas(showingAllAreas, player); // maybe it need this
+	    plugin.showAllAreas(showingAllAreas, player); 
         } else {
             plugin.showAllAreas(false, player);
         }
