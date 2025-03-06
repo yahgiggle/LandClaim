@@ -52,6 +52,11 @@ public class LandClaim extends Plugin implements Listener {
         adminClicks = new AdminOnClickButtons(this, adminTools);
         
         registerEventListener(this);
+        OwnerEventHandler ownerHandler = new OwnerEventHandler(this);
+        registerEventListener(ownerHandler);
+        
+        
+        
         LandClaimedAreas.clear();
         System.out.println("Cleared LandClaimedAreas list on plugin enable.");
         try {
