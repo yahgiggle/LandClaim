@@ -5,6 +5,7 @@ import net.risingworld.api.events.EventMethod;
 import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
 import net.risingworld.api.objects.Player;
+import net.risingworld.api.ui.UILabel;
 
 public class PlayerOnClickButtons implements Listener {
     private final PlayerTools tools;
@@ -37,6 +38,10 @@ public class PlayerOnClickButtons implements Listener {
             } else if (event.getUIElement() == menu.getShowAllAreasLabel()) {
                 menu.toggleAllAreas();
                 player.sendTextMessage("Toggled All Areas visibility.");
+            } else if (event.getUIElement() == menu.getSettingsButton()) {
+                menu.showSettingsMenu();
+            } else if (event.getUIElement() == player.getAttribute("settingsExitButton")) {
+                menu.closeSettingsMenu();
             }
         }
     }

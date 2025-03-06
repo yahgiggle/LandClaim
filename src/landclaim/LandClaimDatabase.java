@@ -203,3 +203,4 @@ public class LandClaimDatabase {
         return input.replace("'", "''");
     }
 }
+

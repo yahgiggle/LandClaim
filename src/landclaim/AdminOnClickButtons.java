@@ -27,16 +27,13 @@ public class AdminOnClickButtons extends LandClaim {
             AdminUIMenu adminMenu = new AdminUIMenu(this, adminTools);
             adminMenu.showAdminToolsPopup(player);
             player.setMouseCursorVisible(true);
-        } else if (element != null && element.getText().equals("<b>X</b>")) {
-            element.setVisible(false);
+        } else if (element != null && element.equals(player.getAttribute("adminPopupExitButton"))) {
+            // Use the specific admin Exit button reference instead of text matching
             UIElement ThisParent = element.getParent();
-            ThisParent.setVisible(false);
+            ThisParent.setVisible(false); // Only hide the parent (admin popup)
             player.setMouseCursorVisible(false);
         } else if (element != null && element.getText().equals("<b>Migrate old WP Database</b>")) {
             adminTools.migrateDatabase(player);
-         //   if (FeedBackinfoPanel != null) {
-         //       FeedBackinfoPanel.setText("Database migration triggered!");  // we dont need this anymore
-         //   }
         } else if (element != null && element.getText().equals("<b>+ MaxAreaAllocation</b>")) {
             handleMaxAreaAdjustment(player, 1, FeedBackinfoPanel);
         } else if (element != null && element.getText().equals("<b>- MaxAreaAllocation</b>")) {
@@ -73,4 +70,3 @@ public class AdminOnClickButtons extends LandClaim {
         plugin.registerEventListener(this);
     }
 }
-

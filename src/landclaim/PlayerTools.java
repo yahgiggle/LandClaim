@@ -7,7 +7,9 @@ public class PlayerTools {
     private final Player player;
     private UILabel claimButton;
     private UILabel unclaimButton;
-    private PlayerUIMenu uiMenu; // Store reference to access exit button
+    private UILabel settingsButton; // Add Settings button
+    private UILabel settingsExitButton;
+    private PlayerUIMenu uiMenu;
 
     public PlayerTools(Player player) {
         this.player = player;
@@ -21,7 +23,7 @@ public class PlayerTools {
         unclaimButton = uiMenu.createButton(10, 60, 180, 45, "<b>Unclaim Area</b>");
         unclaimButton.setVisible(true);
 
-        uiMenu.initExitButton(); // Initialize exit button
+        uiMenu.initExitButton();
     }
 
     public UILabel getClaimButton() {
@@ -32,7 +34,23 @@ public class PlayerTools {
         return unclaimButton;
     }
 
+    public UILabel getSettingsButton() {
+        return settingsButton;
+    }
+
     public UILabel getExitButton() {
         return uiMenu.getExitButton();
     }
+    
+    
+    public UILabel getSettingsExitButton() {
+        return settingsExitButton;
+    }
+    
+    
+    
+    
+    
+    
 }
+

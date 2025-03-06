@@ -204,30 +204,62 @@ public class LandClaim extends Plugin implements Listener {
         showAreas(true, player);
     }
 
-    public void unclaimArea(Player player) throws SQLException {
-        Vector3i chunk = playerChunks.get(player);
-        if (chunk == null) {
-            player.sendTextMessage("Error: No chunk data available! Try moving to update your position.");
-            return;
-        }
-
-        int areaX = chunk.x;
-        int areaY = chunk.y;
-        int areaZ = chunk.z;
-
-        String key = getKeyFromCoords(areaX, areaY, areaZ);
-        ClaimedArea area = claimedAreas.remove(key);
-        if (area != null) {
-            database.getDb().executeUpdate("DELETE FROM `Areas` WHERE AreaX = " + areaX + " AND AreaY = " + areaY + " AND AreaZ = " + areaZ);
-            removeAreaVisual(areaX, areaY, areaZ);
-            player.sendTextMessage("Area unclaimed successfully!");
-        } else {
-            player.sendTextMessage("This area is not claimed!");
-        }
-        updateAreaInfoLabel(player, chunk);
-        showAreas(true, player);
+    
+    
+ public void unclaimArea(Player player) throws SQLException {
+    Vector3i chunk = playerChunks.get(player);
+    if (chunk == null) {
+        player.sendYellMessage("Error: No chunk data available! Try moving to update your position.", 3, true);
+        return;
     }
 
+    int areaX = chunk.x;
+    int areaY = chunk.y;
+    int areaZ = chunk.z;
+
+    String key = getKeyFromCoords(areaX, areaY, areaZ);
+    ClaimedArea area = claimedAreas.get(key);
+    if (area == null) {
+        player.sendYellMessage("This area is not claimed!", 3, true);
+        return;
+    }
+
+    // Check if the player is the owner
+    String playerUID = player.getUID();
+    if (!area.playerUID.equals(playerUID)) {
+        player.sendYellMessage("You can only unclaim your own areas!", 3, true);
+        return;
+    }
+
+    // Get the Area ID from the database
+    ResultSet rs = database.getDb().executeQuery(
+        "SELECT ID FROM `Areas` WHERE AreaX = " + areaX + " AND AreaY = " + areaY + " AND AreaZ = " + areaZ
+    );
+    int areaId = -1;
+    if (rs.next()) {
+        areaId = rs.getInt("ID");
+    }
+
+    // Proceed with unclaiming
+    claimedAreas.remove(key);
+
+    // Delete the area from Areas table
+    database.getDb().executeUpdate("DELETE FROM `Areas` WHERE AreaX = " + areaX + " AND AreaY = " + areaY + " AND AreaZ = " + areaZ);
+
+    // Delete associated guests from Guests table if areaId was found
+    if (areaId != -1) {
+        database.getDb().executeUpdate("DELETE FROM `Guests` WHERE AreaID = " + areaId);
+    }
+
+    removeAreaVisual(areaX, areaY, areaZ);
+    player.sendYellMessage("Area unclaimed successfully!", 3, true);
+    updateAreaInfoLabel(player, chunk);
+    showAreas(true, player);
+}
+ 
+ 
+    
+    
     private void loadClaimedAreas() throws SQLException {
         ResultSet rs = database.getAllClaimedAreas();
         while (rs.next()) {
@@ -499,3 +531,4 @@ public class LandClaim extends Plugin implements Listener {
         }
     }
 }
+
