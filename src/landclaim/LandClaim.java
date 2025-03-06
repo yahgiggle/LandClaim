@@ -38,7 +38,7 @@ public class LandClaim extends Plugin implements Listener {
     public HashMap<Player, PlayerUIMenu> playerMenus = new HashMap<>();
     private HashMap<Player, PlayerTools> playerTools = new HashMap<>();
     private HashMap<Player, Vector3i> playerChunks = new HashMap<>();
-    private HashMap<String, ClaimedArea> claimedAreas = new HashMap<>();
+    HashMap<String, ClaimedArea> claimedAreas = new HashMap<>();
     protected static ArrayList<Area3D> LandClaimedAreas = new ArrayList<>();
 
     @Override
@@ -407,7 +407,7 @@ public class LandClaim extends Plugin implements Listener {
         areaLabel.setText(area != null ? area.areaName : "Area Unclaimed");
     }
 
-    private String getKeyFromCoords(int x, int y, int z) {
+    String getKeyFromCoords(int x, int y, int z) {
         return x + "," + y + "," + z;
     }
 
@@ -423,6 +423,19 @@ public class LandClaim extends Plugin implements Listener {
         return rs.next() ? rs.getString("PlayerUID") : null;
     }
 
+    // Added method to fix compilation error
+    public ClaimedArea getClaimedAreaAt(Vector3i chunkPos) {
+        String key = getKeyFromCoords(chunkPos.x, chunkPos.y, chunkPos.z);
+        Logger.getLogger(LandClaim.class.getName()).info("Looking up claim with key: " + key + " at chunk (" + chunkPos.x + ", " + chunkPos.y + ", " + chunkPos.z + ")");
+        ClaimedArea claim = claimedAreas.get(key);
+        if (claim != null) {
+            Logger.getLogger(LandClaim.class.getName()).info("Found claim at chunk (" + claim.areaX + ", " + claim.areaY + ", " + claim.areaZ + ")");
+        } else {
+            Logger.getLogger(LandClaim.class.getName()).info("No claim found at this chunk.");
+        }
+        return claim;
+    }
+
     private Vector3f getGlobalPosition(Vector3i chunk, Vector3i block) {
         return new Vector3f(
             chunk.x * 32 + block.x,
@@ -431,7 +444,7 @@ public class LandClaim extends Plugin implements Listener {
         );
     }
 
-    private Vector3i getChunkPosition(Vector3f position) {
+    Vector3i getChunkPosition(Vector3f position) {
         return new Vector3i(
             (int) (position.x / 32),
             (int) (position.y / 64),
