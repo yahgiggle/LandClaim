@@ -1,0 +1,163 @@
+package landclaim;
+
+import net.risingworld.api.objects.Player;
+import net.risingworld.api.ui.UIElement;
+import net.risingworld.api.ui.UILabel;
+import net.risingworld.api.ui.style.Font;
+import net.risingworld.api.ui.style.TextAnchor;
+
+public class PlayerUIMenu {
+    private final Player player;
+    private UIElement menuBase;
+    private UILabel claimButton;
+    private UILabel removeButton;
+    private UILabel exitButton;
+    private UILabel showMyAreasLabel;
+    private UILabel showAllAreasLabel;
+    private boolean isVisible;
+    private boolean showingMyAreas = false;
+    private boolean showingAllAreas = false;
+    private LandClaim plugin;
+
+    public PlayerUIMenu(Player player, LandClaim plugin) {
+        this.player = player;
+        this.plugin = plugin;
+        this.isVisible = false;
+        setupBaseMenu();
+    }
+
+    private void setupBaseMenu() {
+        menuBase = new UIElement();
+        player.addUIElement(menuBase);
+        menuBase.setSize(200, 365, false);
+        menuBase.setClickable(false);
+        menuBase.setPosition(45, 45, true);
+        
+        menuBase.setBorderEdgeRadius(5.0f, false);
+        menuBase.setBorder(3);
+        menuBase.setBorderColor(888);
+        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f);
+        menuBase.setVisible(false);
+
+        initClaimButton();
+        initRemoveButton();
+        initExitButton();
+        initShowMyAreasLabel();
+        initShowAllAreasLabel();
+    }
+
+    public UILabel createButton(int x, int y, int width, int height, String text) {
+        UILabel button = new UILabel();
+        button.setClickable(true);
+        button.setText(text);
+        button.setFont(Font.Medieval);
+        button.style.textAlign.set(TextAnchor.MiddleCenter);
+        button.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        button.setFontSize(16);
+        button.setSize(width, height, false);
+        button.setBorder(2);
+        button.setBorderColor(999);
+        button.setBackgroundColor(500);
+        button.setPosition(x, y, false);
+        button.style.borderBottomWidth.set(5);
+        button.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
+        button.hoverStyle.borderBottomWidth.set(5);
+        button.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
+
+        menuBase.addChild(button);
+        return button;
+    }
+
+    public void initClaimButton() {
+        claimButton = createButton(10, 10, 180, 45, "<b>Claim Area</b>");
+        claimButton.setVisible(true);
+    }
+
+    public void initRemoveButton() {
+        removeButton = createButton(10, 60, 180, 45, "<b>Remove Area</b>");
+        removeButton.setVisible(true);
+    }
+
+    public void initExitButton() {
+        exitButton = createButton(10, 260, 180, 45, "<b>Exit</b>");
+        exitButton.setVisible(true);
+    }
+
+    public void initShowMyAreasLabel() {
+        showMyAreasLabel = createButton(10, 110, 180, 45, "Show My Areas\nOff");
+        showMyAreasLabel.setVisible(true);
+    }
+
+    public void initShowAllAreasLabel() {
+        showAllAreasLabel = createButton(10, 160, 180, 45, "Show All Areas\nOff");
+        showAllAreasLabel.setVisible(true);
+    }
+
+    public UILabel getClaimButton() {
+        return claimButton;
+    }
+
+    public UILabel getUnclaimButton() {
+        return removeButton;
+    }
+
+    public UILabel getExitButton() {
+        return exitButton;
+    }
+
+    public UILabel getShowMyAreasLabel() {
+        return showMyAreasLabel;
+    }
+
+    public UILabel getShowAllAreasLabel() {
+        return showAllAreasLabel;
+    }
+
+    public void toggleMenu() {
+        isVisible = !isVisible;
+        menuBase.setVisible(isVisible);
+        player.setMouseCursorVisible(isVisible);
+    }
+
+    public void closeMenu() {
+        isVisible = false;
+        menuBase.setVisible(false);
+        player.setMouseCursorVisible(false);
+    }
+
+    public boolean isVisible() {
+        return isVisible;
+    }
+
+    public void toggleMyAreas() {
+        showingMyAreas = !showingMyAreas;
+        if (showingMyAreas) {
+            showingAllAreas = false; // Turn off Show All Areas
+            plugin.showMyAreas(true, player);
+            plugin.showAllAreas(false, player);
+			plugin.showMyAreas(showingMyAreas, player);  // maybe it need this
+        } else {
+            plugin.showMyAreas(false, player);
+        }
+        updateLabels();
+    }
+
+    public void toggleAllAreas() {
+        showingAllAreas = !showingAllAreas;
+        if (showingAllAreas) {
+            showingMyAreas = false; // Turn off Show My Areas
+            plugin.showAllAreas(true, player);
+            plugin.showMyAreas(false, player);
+			plugin.showAllAreas(showingAllAreas, player); // maybe it need this
+        } else {
+            plugin.showAllAreas(false, player);
+        }
+        updateLabels();
+    }
+
+    private void updateLabels() {
+        showMyAreasLabel.setText("Show My Areas\n" + (showingMyAreas ? "On" : "Off"));
+        showAllAreasLabel.setText("Show All Areas\n" + (showingAllAreas ? "On" : "Off"));
+    }
+}
+

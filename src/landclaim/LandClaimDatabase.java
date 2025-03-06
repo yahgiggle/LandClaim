@@ -1,0 +1,205 @@
+package landclaim;
+
+import net.risingworld.api.Plugin;
+import net.risingworld.api.World;
+import net.risingworld.api.database.Database;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import landclaim.LandClaim.ClaimedArea;
+import net.risingworld.api.objects.Player;
+import net.risingworld.api.ui.UILabel;
+
+public class LandClaimDatabase {
+    private final Plugin plugin;
+    private Database db;
+    private Database oldDataBase;
+
+    public LandClaimDatabase(Plugin plugin) {
+        this.plugin = plugin;
+    }
+
+    public void initialize() {
+        System.out.println("-- LandClaim Database Loaded --");
+        String worldName = World.getName();
+        
+        oldDataBase = plugin.getSQLiteConnection("Plugins/WorldProtection/" + worldName + "/database.db");
+        if (oldDataBase == null) {
+            System.out.println("[LandClaim] Could not connect to WorldProtection database at: Plugins/WorldProtection/" + worldName + "/database.db");
+            return;
+        }
+
+        db = plugin.getSQLiteConnection(plugin.getPath() + "/" + worldName + "/database.db");
+
+        db.execute("CREATE TABLE IF NOT EXISTS `Areas` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaOwnerName` VARCHAR(64), `AreaName` VARCHAR(64), `AreaX` INTEGER, `AreaY` INTEGER, `AreaZ` INTEGER, `PlayerUID` BIGINT, `AreaLocked` BOOLEAN DEFAULT 0, `PVPStatus` BOOLEAN DEFAULT 0, `CreationDate` DATE);");
+        db.execute("CREATE TABLE IF NOT EXISTS `Guests` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaID` INTEGER, `GuestName` VARCHAR(64), `PlayerUID` BIGINT, FOREIGN KEY (AreaID) REFERENCES Areas(ID));");
+        db.execute("CREATE TABLE IF NOT EXISTS `Points` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `UserName` VARCHAR(64), `Points` INTEGER, `PlayerUID` BIGINT);");
+        db.execute("CREATE TABLE IF NOT EXISTS `AdminSettings` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `PointsEarnedAdjust` INTEGER, `AreaCostAdjust` INTEGER);");
+        db.execute("CREATE TABLE IF NOT EXISTS `DataBaseVersion` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);");
+        db.execute("CREATE TABLE IF NOT EXISTS `PlayerAreaStats` (`PlayerUID` BIGINT PRIMARY KEY NOT NULL, `AreaCount` INTEGER DEFAULT 0, `MaxAreaAllocation` INTEGER DEFAULT 2);");
+
+        try (ResultSet result = db.executeQuery("SELECT * FROM `DataBaseVersion` WHERE ID = '1'")) {
+            if (!result.next()) {
+                db.executeUpdate("INSERT INTO `DataBaseVersion` (Version) VALUES ('0');");
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(LandClaimDatabase.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    public void migrateAreasFromWorldProtection(Player player) {
+        // Unchanged migration logic
+        UILabel FeedBackinfoPanel = (UILabel)player.getAttribute("FeedBackinfoPanel");
+        FeedBackinfoPanel.setText("Migration of Areas Started");
+        
+        if (oldDataBase == null) {
+            System.out.println("[LandClaim] WorldProtection database not initialized for migration.");
+            FeedBackinfoPanel.setText("[LandClaim] WorldProtection database not initialized for migration!!!");
+            return;
+        }
+
+        try {
+            boolean hasCreationDate = false, hasAreaLocked = false, hasPVPStatus = false;
+            boolean hasAreaGuest = false;
+            ResultSet columns = oldDataBase.executeQuery("PRAGMA table_info(`Areas`)");
+            while (columns.next()) {
+                String columnName = columns.getString("name");
+                if ("CreationDate".equals(columnName)) hasCreationDate = true;
+                if ("AreaLocked".equals(columnName)) hasAreaLocked = true;
+                if ("PVPStatus".equals(columnName)) hasPVPStatus = true;
+                if ("AreaGuest".equals(columnName)) hasAreaGuest = true;
+            }
+
+            String selectSql = "SELECT ID, AreaOwnerName, AreaName, AreaX, AreaY, AreaZ, PlayerUID";
+            if (hasCreationDate) selectSql += ", CreationDate";
+            if (hasAreaLocked) selectSql += ", AreaLocked";
+            if (hasPVPStatus) selectSql += ", PVPStatus";
+            selectSql += " FROM `Areas`";
+
+            ResultSet areasRs = oldDataBase.executeQuery(selectSql);
+            while (areasRs.next()) {
+                int id = areasRs.getInt("ID");
+                String areaOwnerName = areasRs.getString("AreaOwnerName");
+                String areaName = areasRs.getString("AreaName");
+                int areaX = areasRs.getInt("AreaX");
+                int areaY = areasRs.getInt("AreaY");
+                int areaZ = areasRs.getInt("AreaZ");
+                long playerUID = areasRs.getLong("PlayerUID");
+
+                ResultSet existing = db.executeQuery("SELECT ID FROM `Areas` WHERE ID = " + id);
+                if (!existing.next()) {
+                    String insertSql = "INSERT INTO `Areas` (ID, AreaOwnerName, AreaName, AreaX, AreaY, AreaZ, PlayerUID, AreaLocked, PVPStatus, CreationDate) " +
+                        "VALUES (" + id + ", '" + areaOwnerName + "', '" + areaName + "', " +
+                        areaX + ", " + areaY + ", " + areaZ + ", " + playerUID + ", 0, 0, NULL)";
+                    db.executeUpdate(insertSql);
+                }
+
+                String updateSql = "UPDATE `Areas` SET ";
+                boolean hasUpdates = false;
+                if (hasCreationDate) {
+                    String creationDate = areasRs.getString("CreationDate");
+                    if (creationDate != null) {
+                        updateSql += "CreationDate = '" + creationDate + "'";
+                        hasUpdates = true;
+                    }
+                }
+                if (hasAreaLocked) {
+                    if (hasUpdates) updateSql += ", ";
+                    int areaLocked = areasRs.getInt("AreaLocked");
+                    updateSql += "AreaLocked = " + (areaLocked != 0);
+                    hasUpdates = true;
+                }
+                if (hasPVPStatus) {
+                    if (hasUpdates) updateSql += ", ";
+                    int pvpStatus = areasRs.getInt("PVPStatus");
+                    updateSql += "PVPStatus = " + (pvpStatus != 0);
+                    hasUpdates = true;
+                }
+                if (hasUpdates) {
+                    updateSql += " WHERE ID = " + id;
+                    db.executeUpdate(updateSql);
+                }
+            }
+
+            if (hasAreaGuest) {
+                ResultSet guestsRs = oldDataBase.executeQuery("SELECT ID, AreaGuest FROM `Areas` WHERE AreaGuest IS NOT NULL AND AreaGuest != ''");
+                while (guestsRs.next()) {
+                    int areaId = guestsRs.getInt("ID");
+                    String guestName = guestsRs.getString("AreaGuest");
+                    long playerUID = 0;
+
+                    ResultSet existingGuest = db.executeQuery("SELECT ID FROM `Guests` WHERE AreaID = " + areaId + " AND GuestName = '" + guestName + "'");
+                    if (!existingGuest.next()) {
+                        db.executeUpdate("INSERT INTO `Guests` (AreaID, GuestName, PlayerUID) " +
+                            "VALUES (" + areaId + ", '" + guestName + "', " + playerUID + ")");
+                    }
+                }
+                System.out.println("[LandClaim] Migration of Guests from WorldProtection database completed.");
+            }
+
+            System.out.println("[LandClaim] Migration of Areas from WorldProtection database completed.");
+            FeedBackinfoPanel.setText("Migration of Areas from WorldProtection database completed");
+            
+        } catch (SQLException ex) {
+            System.out.println("[LandClaim] Areas and Guests migration failed: " + ex.getMessage());
+            FeedBackinfoPanel.setText("Areas and Guests migration failed!!!");
+            ex.printStackTrace();
+        }
+    }
+
+    public void close() {
+        if (db != null) {
+            db.close();
+        }
+        if (oldDataBase != null) {
+            oldDataBase.close();
+        }
+    }
+
+    public Database getDb() {
+        return db;
+    }
+
+    public Database getOldDataBase() {
+        return oldDataBase;
+    }
+
+    public void addClaimedArea(ClaimedArea area) throws SQLException {
+        String sql = "INSERT INTO `Areas` (AreaOwnerName, AreaName, AreaX, AreaY, AreaZ, PlayerUID, AreaLocked, PVPStatus, CreationDate) " +
+                     "VALUES ('" + escapeSql(area.areaOwnerName) + "', '" + escapeSql(area.areaName) + "', " +
+                     area.areaX + ", " + area.areaY + ", " + area.areaZ + ", '" + area.playerUID + "', 0, 0, CURRENT_TIMESTAMP)";
+        db.executeUpdate(sql);
+        
+        // Update PlayerAreaStats
+        String uid = area.playerUID;
+        ResultSet rs = db.executeQuery("SELECT AreaCount FROM `PlayerAreaStats` WHERE PlayerUID = '" + uid + "'");
+        int areaCount = rs.next() ? rs.getInt("AreaCount") + 1 : 1;
+        db.executeUpdate("INSERT OR REPLACE INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) " +
+                         "VALUES ('" + uid + "', " + areaCount + ", " + (areaCount == 1 ? 2 : "MaxAreaAllocation") + ")");
+    }
+
+    public ResultSet getAllClaimedAreas() throws SQLException {
+        return db.executeQuery("SELECT PlayerUID, AreaOwnerName, AreaName, AreaX, AreaY, AreaZ FROM `Areas`");
+    }
+
+    public int getPlayerAreaCount(String playerUID) throws SQLException {
+        ResultSet rs = db.executeQuery("SELECT AreaCount FROM `PlayerAreaStats` WHERE PlayerUID = '" + playerUID + "'");
+        return rs.next() ? rs.getInt("AreaCount") : 0;
+    }
+
+    public int getMaxAreaAllocation(String playerUID) throws SQLException {
+        ResultSet rs = db.executeQuery("SELECT MaxAreaAllocation FROM `PlayerAreaStats` WHERE PlayerUID = '" + playerUID + "'");
+        return rs.next() ? rs.getInt("MaxAreaAllocation") : 2; // Default 2 if no entry
+    }
+
+    public void setMaxAreaAllocation(String playerUID, int maxAreas) throws SQLException {
+        db.executeUpdate("INSERT OR REPLACE INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) " +
+                         "VALUES ('" + playerUID + "', (SELECT AreaCount FROM `PlayerAreaStats` WHERE PlayerUID = '" + playerUID + "'), " + maxAreas + ")");
+    }
+
+    private String escapeSql(String input) {
+        if (input == null) return "";
+        return input.replace("'", "''");
+    }
+}

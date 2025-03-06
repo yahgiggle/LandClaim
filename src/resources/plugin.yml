@@ -1,0 +1,8 @@
+name: LandClaim
+main: landclaim.LandClaim
+version: 0.1
+author: Yahgiggle
+team:
+description: "Land Claiming plugin"
+license:
+website:
