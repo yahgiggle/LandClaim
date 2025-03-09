@@ -24,9 +24,9 @@ public class AdminUIMenu {
 
         UIElement adminMenu = new UIElement();
         player.addUIElement(adminMenu, UITarget.IngameMenu);
-        adminMenu.setSize(200, 65, false);
+        adminMenu.setSize(206, 66, false);
         adminMenu.setClickable(false);
-        adminMenu.setPosition(20, 10, true);
+        adminMenu.setPosition(44, 70, true);
         adminMenu.setBorderEdgeRadius(5.0f, false);
         adminMenu.setBorder(3);
         adminMenu.setBorderColor(888);

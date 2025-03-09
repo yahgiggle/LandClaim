@@ -39,36 +39,53 @@ public class OwnerEventHandler implements Listener {
         return null;
     }
 
-    private boolean hasPermission(Player player, LandClaim.ClaimedArea claim, Vector3i chunkPos) {
+    private boolean isGuest(Player player, LandClaim.ClaimedArea claim) {
+        try {
+            String query = "SELECT PlayerUID FROM `Guests` WHERE AreaID = (SELECT ID FROM `Areas` WHERE AreaX = " + claim.areaX +
+                           " AND AreaY = " + claim.areaY + " AND AreaZ = " + claim.areaZ + ")";
+            ResultSet rs = plugin.getDatabase().getDb().executeQuery(query);
+            String playerUID = player.getUID();
+            while (rs.next()) {
+                String guestUID = rs.getString("PlayerUID");
+                if (guestUID != null && guestUID.equals(playerUID)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (SQLException ex) {
+            Logger.getLogger(OwnerEventHandler.class.getName()).log(Level.SEVERE, "Failed to check guest status", ex);
+            return false;
+        }
+    }
+
+    private boolean hasPermission(Player player, LandClaim.ClaimedArea claim, Vector3i chunkPos, String permission) {
         if (claim == null || !(claim.areaX == chunkPos.x && claim.areaY == chunkPos.y && claim.areaZ == chunkPos.z)) {
             return true; // No claim or mismatch, allow action
         }
         String playerUID = player.getUID();
-        Logger.getLogger(OwnerEventHandler.class.getName()).info("Checking permission for player UID: " + playerUID + " against claim owner UID: " + claim.playerUID + 
+        Logger.getLogger(OwnerEventHandler.class.getName()).info("Checking permission '" + permission + "' for player UID: " + playerUID + 
                 " at chunk (" + claim.areaX + ", " + claim.areaY + ", " + claim.areaZ + ")");
 
-        // Check if player is the owner
+        // Owners always have permission
         if (claim.playerUID.equals(playerUID)) {
             Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission granted: Player is the owner.");
             return true;
         }
 
-        // Check if player is a guest
-        try {
-            String query = "SELECT PlayerUID FROM `Guests` WHERE AreaID = (SELECT ID FROM `Areas` WHERE AreaX = " + claim.areaX +
-                           " AND AreaY = " + claim.areaY + " AND AreaZ = " + claim.areaZ + ")";
-            ResultSet rs = plugin.getDatabase().getDb().executeQuery(query);
-            while (rs.next()) {
-                String guestUID = rs.getString("PlayerUID");
-                if (guestUID != null && guestUID.equals(playerUID)) {
-                    Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission granted: Player is a guest.");
-                    return true;
-                }
+        // Check if player is a guest and get the specific permission
+        if (isGuest(player, claim)) {
+            try {
+                int areaId = plugin.getDatabase().getAreaIdFromCoords(claim.areaX, claim.areaY, claim.areaZ);
+                boolean allowed = plugin.getDatabase().getGuestPermission(areaId, permission);
+                Logger.getLogger(OwnerEventHandler.class.getName()).info("Guest permission '" + permission + "' for area " + areaId + ": " + allowed);
+                return allowed;
+            } catch (SQLException ex) {
+                Logger.getLogger(OwnerEventHandler.class.getName()).log(Level.SEVERE, "Failed to check guest permission '" + permission + "'", ex);
+                return false; // Deny if we can't check
             }
-            Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission denied: Player is neither owner nor guest.");
-        } catch (SQLException ex) {
-            Logger.getLogger(OwnerEventHandler.class.getName()).log(Level.SEVERE, "Failed to check guest permissions", ex);
         }
+
+        Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission denied: Player is neither owner nor guest.");
         return false;
     }
 
@@ -97,7 +114,7 @@ public class OwnerEventHandler implements Listener {
                     } else {
                         player.sendYellMessage("Entered unclaimed area", 3, true);
                     }
-                    break; // Exit after finding the first matching area
+                    break;
                 }
             }
         }
@@ -113,16 +130,15 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !isGuest(player, claim) && !claim.playerUID.equals(player.getUID())) {
                         player.sendYellMessage("You spawned in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
     }
 
-    // World Interaction Events (net.risingworld.api.events.player.world)
     @EventMethod
     public void onPlayerChangeConstructionColor(PlayerChangeConstructionColorEvent event) {
         Player player = event.getPlayer();
@@ -133,11 +149,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerChangeConstructionColor")) {
                         player.sendYellMessage("You can’t change construction colors in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -153,11 +169,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerChangeObjectColor")) {
                         player.sendYellMessage("You can’t change object colors in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -173,11 +189,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerChangeObjectInfo")) {
                         player.sendYellMessage("You can’t change object info in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -193,11 +209,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceConstruction")) {
                         player.sendYellMessage("You can’t place construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -213,11 +229,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerCreativePlaceVegetation")) {
                         player.sendYellMessage("You can’t place vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -233,11 +249,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerCreativeRemoveConstruction")) {
                         player.sendYellMessage("You can’t remove construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -253,11 +269,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerCreativeRemoveObject")) {
                         player.sendYellMessage("You can’t remove objects in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -273,11 +289,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerCreativeRemoveVegetation")) {
                         player.sendYellMessage("You can’t remove vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -293,11 +309,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerCreativeTerrainEdit")) {
                         player.sendYellMessage("You can’t edit terrain in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -313,11 +329,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerDestroyConstruction")) {
                         player.sendYellMessage("You can’t destroy construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -333,11 +349,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerDestroyObject")) {
                         player.sendYellMessage("You can’t destroy objects in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -353,11 +369,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerDestroyTerrain")) {
                         player.sendYellMessage("You can’t destroy terrain in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -373,11 +389,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerDestroyVegetation")) {
                         player.sendYellMessage("You can’t destroy vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -393,11 +409,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerEditConstruction")) {
                         player.sendYellMessage("You can’t edit construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -413,11 +429,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerHitConstruction")) {
                         player.sendYellMessage("You can’t hit construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -433,11 +449,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerHitObject")) {
                         player.sendYellMessage("You can’t hit objects in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -453,11 +469,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerHitTerrain")) {
                         player.sendYellMessage("You can’t hit terrain in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -473,11 +489,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerHitVegetation")) {
                         player.sendYellMessage("You can’t hit vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -493,11 +509,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerHitWater")) {
                         player.sendYellMessage("You can’t interact with water in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -513,11 +529,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceBluePrints")) {
                         player.sendYellMessage("You can’t place blueprints in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -533,11 +549,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceConstruction")) {
                         player.sendYellMessage("You can’t place construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -553,11 +569,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceGrass")) {
                         player.sendYellMessage("You can’t place grass in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -573,11 +589,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceObject")) {
                         player.sendYellMessage("You can’t place objects in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -593,11 +609,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceTerrain")) {
                         player.sendYellMessage("You can’t place terrain in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -613,11 +629,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerPlaceVegetation")) {
                         player.sendYellMessage("You can’t place vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -633,11 +649,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerRemoveConstruction")) {
                         player.sendYellMessage("You can’t remove construction in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -653,11 +669,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerRemoveGrass")) {
                         player.sendYellMessage("You can’t remove grass in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -673,11 +689,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerRemoveObject")) {
                         player.sendYellMessage("You can’t remove objects in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -693,11 +709,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerRemoveVegetation")) {
                         player.sendYellMessage("You can’t remove vegetation in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -713,11 +729,11 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerRemoveWater")) {
                         player.sendYellMessage("You can’t remove water in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
@@ -733,14 +749,14 @@ public class OwnerEventHandler implements Listener {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
                     LandClaim.ClaimedArea claim = getClaimFromArea3D(area, chunkPos);
-                    if (claim != null && !hasPermission(player, claim, chunkPos)) {
+                    if (claim != null && !hasPermission(player, claim, chunkPos, "PlayerWorldEdit")) {
                         player.sendYellMessage("You can’t edit the world in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
                         event.setCancelled(true);
                     }
-                    return; // Exit after first match
+                    return;
                 }
             }
         }
     }
-}
+} 
 

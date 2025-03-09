@@ -4,12 +4,11 @@ import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UILabel;
 
 public class PlayerTools {
-    private final Player player;
+    private Player player;
+    private PlayerUIMenu uiMenu;
     private UILabel claimButton;
     private UILabel unclaimButton;
-    private UILabel settingsButton; // Add Settings button
-    private UILabel settingsExitButton;
-    private PlayerUIMenu uiMenu;
+    private UILabel exitButton;
 
     public PlayerTools(Player player) {
         this.player = player;
@@ -17,13 +16,9 @@ public class PlayerTools {
 
     public void initTools(PlayerUIMenu uiMenu) {
         this.uiMenu = uiMenu;
-        claimButton = uiMenu.createButton(10, 10, 180, 45, "<b>Claim Area</b>");
-        claimButton.setVisible(true);
-
-        unclaimButton = uiMenu.createButton(10, 60, 180, 45, "<b>Unclaim Area</b>");
-        unclaimButton.setVisible(true);
-
-        uiMenu.initExitButton();
+        this.claimButton = uiMenu.getClaimButton();
+        this.unclaimButton = uiMenu.getUnclaimButton();
+        this.exitButton = uiMenu.getExitButton();
     }
 
     public UILabel getClaimButton() {
@@ -34,23 +29,9 @@ public class PlayerTools {
         return unclaimButton;
     }
 
-    public UILabel getSettingsButton() {
-        return settingsButton;
-    }
-
     public UILabel getExitButton() {
-        return uiMenu.getExitButton();
+        return exitButton;
     }
-    
-    
-    public UILabel getSettingsExitButton() {
-        return settingsExitButton;
-    }
-    
-    
-    
-    
-    
-    
 }
+
 
