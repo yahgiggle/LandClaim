@@ -66,13 +66,11 @@ public class OwnerEventHandler implements Listener {
         Logger.getLogger(OwnerEventHandler.class.getName()).info("Checking permission '" + permission + "' for player UID: " + playerUID + 
                 " at chunk (" + claim.areaX + ", " + claim.areaY + ", " + claim.areaZ + ")");
 
-        // Owners always have permission
         if (claim.playerUID.equals(playerUID)) {
             Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission granted: Player is the owner.");
             return true;
         }
 
-        // Check if player is a guest and get the specific permission
         if (isGuest(player, claim)) {
             try {
                 int areaId = plugin.getDatabase().getAreaIdFromCoords(claim.areaX, claim.areaY, claim.areaZ);
@@ -81,12 +79,21 @@ public class OwnerEventHandler implements Listener {
                 return allowed;
             } catch (SQLException ex) {
                 Logger.getLogger(OwnerEventHandler.class.getName()).log(Level.SEVERE, "Failed to check guest permission '" + permission + "'", ex);
-                return false; // Deny if we can't check
+                return false;
             }
         }
 
         Logger.getLogger(OwnerEventHandler.class.getName()).info("Permission denied: Player is neither owner nor guest.");
         return false;
+    }
+
+    private ArrayList<Area3D> getAllAreasForPlayer(Player player) {
+        ArrayList<Area3D> allAreas = new ArrayList<>(LandClaim.AllClaimedAreas); // Others' areas
+        ArrayList<Area3D> userAreas = LandClaim.UserClaimedAreas.get(player.getUID()); // Player's areas
+        if (userAreas != null) {
+            allAreas.addAll(userAreas); // Combine both
+        }
+        return allAreas;
     }
 
     @EventMethod
@@ -104,7 +111,7 @@ public class OwnerEventHandler implements Listener {
         player.setAttribute("PlayersChunkPositionY", chunkPos.y);
         player.setAttribute("PlayersChunkPositionZ", chunkPos.z);
 
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(playerPos)) {
@@ -125,7 +132,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -144,7 +151,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -164,7 +171,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -184,7 +191,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -204,7 +211,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -224,7 +231,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -244,7 +251,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -264,7 +271,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -284,7 +291,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -304,7 +311,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -324,7 +331,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -344,7 +351,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -364,7 +371,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -384,7 +391,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -404,7 +411,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -424,7 +431,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -444,7 +451,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -464,7 +471,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -484,7 +491,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -504,7 +511,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -524,7 +531,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -544,7 +551,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -564,7 +571,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -584,7 +591,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -604,7 +611,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -624,7 +631,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -644,7 +651,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -664,7 +671,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -684,7 +691,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -704,7 +711,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -724,7 +731,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -744,7 +751,7 @@ public class OwnerEventHandler implements Listener {
         Player player = event.getPlayer();
         Vector3i chunkPos = player.getChunkPosition();
         Vector3f blockPos = player.getPosition();
-        ArrayList<Area3D> copyAllAreas = new ArrayList<>(plugin.LandClaimedAreas);
+        ArrayList<Area3D> copyAllAreas = getAllAreasForPlayer(player);
         if (copyAllAreas != null) {
             for (Area3D area : copyAllAreas) {
                 if (area.getArea().isPointInArea(blockPos)) {
@@ -758,5 +765,4 @@ public class OwnerEventHandler implements Listener {
             }
         }
     }
-} 
-
+}
