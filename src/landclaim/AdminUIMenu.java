@@ -106,3 +106,4 @@ public class AdminUIMenu {
         return label;
     }
 }
+

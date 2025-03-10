@@ -112,7 +112,7 @@ public class LandClaim extends Plugin implements Listener {
                 addAreaInfoLabel(player);
                 updateAreaInfoLabel(player, initialChunk);
                 myAreasVisible.put(player, false);
-                allAreasVisible.put(player, false);
+                allAreasVisible.put(player, true); // Sync with PlayerUIMenu default
                 if (!areasLoaded) {
                     try {
                         loadClaimedAreas();
@@ -121,7 +121,18 @@ public class LandClaim extends Plugin implements Listener {
                         System.out.println("[LandClaim] Failed to load areas: " + e.getMessage());
                     }
                 }
-                showAreasOnConnect(player);
+                menu.updateVisibleAreas(initialChunk); // Load initial areas
+                menu.updateAreaVisibility(); // Show all areas immediately
+                showAreasOnConnect(player); // Optional hint
+
+                // Start a 60-second timer to disable "Show All Areas"
+                new Timer(60.0f, 0f, 0, () -> {
+                    PlayerUIMenu currentMenu = playerMenus.get(player);
+                    if (currentMenu != null) {
+                        currentMenu.disableAllAreas();
+                        allAreasVisible.put(player, false);
+                    }
+                }).start();
             }
         );
     }
@@ -141,9 +152,13 @@ public class LandClaim extends Plugin implements Listener {
         Vector3i chunk = event.getNewChunkCoordinates();
         playerChunks.put(player, chunk);
         updateAreaInfoLabel(player, chunk);
+        PlayerUIMenu menu = playerMenus.get(player);
+        if (menu != null) {
+            menu.updateVisibleAreas(chunk);
+            menu.updateAreaVisibility();
+        }
+        System.out.println("[LandClaim] Player " + player.getName() + " entered chunk " + chunk);
     }
-    
-    
 
     @EventMethod
     public void onPlayerCommand(PlayerCommandEvent event) {
@@ -267,7 +282,7 @@ public class LandClaim extends Plugin implements Listener {
         System.out.println("[LandClaim] Loaded " + claimedAreasByChunk.size() + " areas.");
     }
 
-    private void addAreaVisual(int x, int y, int z, String name, String uid, boolean isPlayer, Player player) {
+    public void addAreaVisual(int x, int y, int z, String name, String uid, boolean isPlayer, Player player) {
         Vector3i chunk = new Vector3i(x, y, z);
         Vector3f start = getGlobalPosition(chunk, new Vector3i(0, 0, 0));
         Vector3f end = getGlobalPosition(chunk, new Vector3i(32, 64, 32));
@@ -304,14 +319,7 @@ public class LandClaim extends Plugin implements Listener {
             if (Math.abs(areaChunk.x - chunk.x) <= radius &&
                 Math.abs(areaChunk.y - chunk.y) <= radius &&
                 Math.abs(areaChunk.z - chunk.z) <= radius) {
-                addAreaVisual(area.areaX, area.areaY, area.areaZ, area.areaName, area.playerUID, area.playerUID.equals(uid), player);
-                new Timer(60f, 0f, 0, () -> {
-                    ArrayList<Area3D> areas = area.playerUID.equals(uid) ? UserClaimedAreas.get(uid) : AllClaimedAreas;
-                    Area3D visual = areas.stream()
-                        .filter(a -> getChunkPosition(a.getArea().getStartPosition()).equals(areaChunk))
-                        .findFirst().orElse(null);
-                    if (visual != null) player.removeGameObject(visual);
-                }).start();
+                player.sendTextMessage("Nearby: " + area.areaName + " by " + area.areaOwnerName);
             }
         }
     }
@@ -326,7 +334,7 @@ public class LandClaim extends Plugin implements Listener {
         allAreasVisible.put(player, true);
     }
 
-    private void hideAreas(Player player) {
+    public void hideAreas(Player player) {
         String uid = player.getUID();
         ArrayList<Area3D> userAreas = UserClaimedAreas.get(uid);
         if (userAreas != null) userAreas.forEach(player::removeGameObject);

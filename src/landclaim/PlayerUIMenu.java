@@ -23,16 +23,19 @@ public class PlayerUIMenu {
     private UILabel claimButton, removeButton, exitButton, settingsButton, settingsExitButton;
     private UILabel showMyAreasLabel, showAllAreasLabel, infoLabel;
     private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton;
-    private boolean isVisible, showingMyAreas = false, showingAllAreas = false;
+    private boolean isVisible, showingMyAreas = false, showingAllAreas = true; // Default to true for connect
     private List<Player> worldPlayers = new ArrayList<>();
     private int currentPlayerIndex = -1, currentAreaId = -1;
     final Map<String, UILabel> permissionButtons = new HashMap<>();
+    private Map<Vector3i, LandClaim.ClaimedArea> visibleAreas = new HashMap<>(); // Tracks areas in 5-chunk radius
 
     public PlayerUIMenu(Player player, LandClaim plugin) {
         this.player = player;
         this.plugin = plugin;
         setupBaseMenu();
         setupSettingsMenu();
+        updateVisibleAreas(player.getChunkPosition()); // Initial area load
+        updateLabels(); // Reflect initial "Show All Areas" state
     }
 
     private void setupBaseMenu() {
@@ -50,7 +53,7 @@ public class PlayerUIMenu {
         claimButton = createButton(menuBase, 10, 10, "Claim Area", 250, 45);
         removeButton = createButton(menuBase, 10, 60, "Remove Area", 250, 45);
         showMyAreasLabel = createButton(menuBase, 10, 110, "Show My Areas\nOff", 250, 45);
-        showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOff", 250, 45);
+        showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45); // Initial state On
         exitButton = createButton(menuBase, 10, 210, "Exit", 250, 45);
         settingsButton = createButton(menuBase, 10, 260, "Settings", 250, 45);
     }
@@ -230,6 +233,7 @@ public class PlayerUIMenu {
         isVisible = !isVisible;
         menuBase.setVisible(isVisible);
         player.setMouseCursorVisible(isVisible);
+        if (isVisible) updateAreaVisibility(); // Refresh visibility when menu opens
     }
 
     public void closeMenu() {
@@ -241,19 +245,28 @@ public class PlayerUIMenu {
     public void toggleMyAreas() {
         showingMyAreas = !showingMyAreas;
         if (showingMyAreas) showingAllAreas = false;
-        plugin.showAllAreas(false, player);
-        plugin.showMyAreas(showingMyAreas, player);
-        player.sendTextMessage("My Areas: " + (showingMyAreas ? "On" : "Off"));
+        updateAreaVisibility();
         updateLabels();
+        player.sendTextMessage("My Areas: " + (showingMyAreas ? "On" : "Off"));
+        System.out.println("[PlayerUIMenu] Toggle My Areas: " + showingMyAreas + " for " + player.getName());
     }
 
     public void toggleAllAreas() {
         showingAllAreas = !showingAllAreas;
         if (showingAllAreas) showingMyAreas = false;
-        plugin.showMyAreas(false, player);
-        plugin.showAllAreas(showingAllAreas, player);
-        player.sendTextMessage("All Areas: " + (showingAllAreas ? "On" : "Off"));
+        updateAreaVisibility();
         updateLabels();
+        player.sendTextMessage("All Areas: " + (showingAllAreas ? "On" : "Off"));
+        System.out.println("[PlayerUIMenu] Toggle All Areas: " + showingAllAreas + " for " + player.getName());
+    }
+
+    // New method to allow LandClaim to disable "Show All Areas"
+    public void disableAllAreas() {
+        showingAllAreas = false;
+        updateAreaVisibility();
+        updateLabels();
+        player.sendTextMessage("All Areas: Off (auto-disabled after 60s)");
+        System.out.println("[PlayerUIMenu] Auto-disabled All Areas for " + player.getName());
     }
 
     private void updateLabels() {
@@ -282,6 +295,40 @@ public class PlayerUIMenu {
         } catch (SQLException e) {
             return false;
         }
+    }
+
+    public void updateVisibleAreas(Vector3i currentChunk) {
+        visibleAreas.clear();
+        int radius = 5;
+        String uid = player.getUID();
+        for (Map.Entry<Vector3i, LandClaim.ClaimedArea> entry : plugin.claimedAreasByChunk.entrySet()) {
+            Vector3i areaChunk = entry.getKey();
+            if (Math.abs(areaChunk.x - currentChunk.x) <= radius &&
+                Math.abs(areaChunk.y - currentChunk.y) <= radius &&
+                Math.abs(areaChunk.z - currentChunk.z) <= radius) {
+                visibleAreas.put(areaChunk, entry.getValue());
+            }
+        }
+        System.out.println("[PlayerUIMenu] Updated visible areas for " + player.getName() + " at chunk " + currentChunk + 
+                           ": " + visibleAreas.size() + " areas found.");
+    }
+
+    public void updateAreaVisibility() {
+        plugin.hideAreas(player); // Clear existing visuals
+        String uid = player.getUID();
+
+        if (showingMyAreas) {
+            visibleAreas.entrySet().stream()
+                .filter(e -> e.getValue().playerUID.equals(uid))
+                .forEach(e -> plugin.addAreaVisual(e.getValue().areaX, e.getValue().areaY, e.getValue().areaZ, 
+                                                  e.getValue().areaName, uid, true, player));
+        } else if (showingAllAreas) {
+            visibleAreas.forEach((chunk, area) -> 
+                plugin.addAreaVisual(area.areaX, area.areaY, area.areaZ, area.areaName, area.playerUID, 
+                                     area.playerUID.equals(uid), player));
+        }
+        System.out.println("[PlayerUIMenu] Updated visibility for " + player.getName() + 
+                           ": My Areas=" + showingMyAreas + ", All Areas=" + showingAllAreas);
     }
 
     public void nextPlayer() {
