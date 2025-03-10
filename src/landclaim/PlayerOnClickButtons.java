@@ -5,7 +5,6 @@ import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UILabel;
-
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
@@ -57,13 +56,15 @@ public class PlayerOnClickButtons implements Listener {
             }
         } else if (element == menu.getSettingsExitButton()) {
             System.out.println("[PlayerOnClickButtons] Settings exit clicked for " + player.getName());
-            menu.closeSettingsMenu();
+            menu.closeSettingsMenu(); // This line (59) assumes closeSettingsMenu exists
         } else if (element == menu.getShowMyAreasLabel()) {
             menu.toggleMyAreas();
         } else if (element == menu.getShowAllAreasLabel()) {
             menu.toggleAllAreas();
         } else if (element == menu.getBuyAreaButton()) {
-            plugin.buyAreaAllocation(player); // Now accessible since it’s public
+            System.out.println("[PlayerOnClickButtons] Buy Area clicked for " + player.getName());
+            player.sendTextMessage("Updating points and processing purchase...");
+            plugin.buyAreaAllocation(player);
         } else if (element == player.getAttribute("nextPlayerButton")) {
             menu.nextPlayer();
         } else if (element == player.getAttribute("backPlayerButton")) {

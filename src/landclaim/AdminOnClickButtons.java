@@ -46,6 +46,14 @@ public class AdminOnClickButtons implements Listener {
             handleMaxAreaAdjustment(player, 1, feedback);
         } else if (element.equals(player.getAttribute("maxMinusButton"))) {
             handleMaxAreaAdjustment(player, -1, feedback);
+        } else if (element.equals(player.getAttribute("pointsPlusButton"))) {
+            handlePointsAdjustment(player, 1, feedback);
+        } else if (element.equals(player.getAttribute("pointsMinusButton"))) {
+            handlePointsAdjustment(player, -1, feedback);
+        } else if (element.equals(player.getAttribute("costPlusButton"))) {
+            handleCostAdjustment(player, 1, feedback);
+        } else if (element.equals(player.getAttribute("costMinusButton"))) {
+            handleCostAdjustment(player, -1, feedback);
         }
     }
 
@@ -86,8 +94,57 @@ public class AdminOnClickButtons implements Listener {
         );
     }
 
+    private void handlePointsAdjustment(Player player, int adjustment, UILabel feedback) {
+        plugin.getTaskQueue().queueTask(
+            () -> {
+                try {
+                    int current = plugin.getDatabase().getPointsEarnedAdjust();
+                    int newValue = current + adjustment;
+                    if (newValue < 0) {
+                        player.setAttribute("pointsResult", "Points per hour cannot go below 0!");
+                        return;
+                    }
+                    plugin.getDatabase().setPointsEarnedAdjust(newValue);
+                    player.setAttribute("pointsResult", "Points per hour set to " + newValue);
+                } catch (SQLException e) {
+                    player.setAttribute("pointsResult", "Error: " + e.getMessage());
+                }
+            },
+            () -> {
+                if (feedback != null) {
+                    String result = (String) player.getAttribute("pointsResult");
+                    feedback.setText(result != null ? result : "Points adjustment failed!");
+                }
+            }
+        );
+    }
+
+    private void handleCostAdjustment(Player player, int adjustment, UILabel feedback) {
+        plugin.getTaskQueue().queueTask(
+            () -> {
+                try {
+                    int current = plugin.getDatabase().getAreaCostAdjust();
+                    int newValue = current + adjustment;
+                    if (newValue < 1) {
+                        player.setAttribute("costResult", "Area cost cannot go below 1!");
+                        return;
+                    }
+                    plugin.getDatabase().setAreaCostAdjust(newValue);
+                    player.setAttribute("costResult", "Area cost set to " + newValue);
+                } catch (SQLException e) {
+                    player.setAttribute("costResult", "Error: " + e.getMessage());
+                }
+            },
+            () -> {
+                if (feedback != null) {
+                    String result = (String) player.getAttribute("costResult");
+                    feedback.setText(result != null ? result : "Cost adjustment failed!");
+                }
+            }
+        );
+    }
+
     public void register() {
         plugin.registerEventListener(this);
     }
 }
-

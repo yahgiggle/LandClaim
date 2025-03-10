@@ -13,7 +13,7 @@ import net.risingworld.api.events.player.world.PlayerCreativeRemoveConstructionE
 import net.risingworld.api.events.player.world.PlayerCreativeRemoveObjectEvent;
 import net.risingworld.api.events.player.world.PlayerCreativeRemoveVegetationEvent;
 import net.risingworld.api.events.player.world.PlayerCreativeTerrainEditEvent;
-import net.risingworld.api.events.player.world.PlayerWorldEditEvent; // Reintroduced
+import net.risingworld.api.events.player.world.PlayerWorldEditEvent;
 import net.risingworld.api.events.player.world.PlayerDestroyConstructionEvent;
 import net.risingworld.api.events.player.world.PlayerDestroyObjectEvent;
 import net.risingworld.api.events.player.world.PlayerDestroyTerrainEvent;
@@ -38,7 +38,6 @@ import net.risingworld.api.events.player.world.PlayerRemoveWaterEvent;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.utils.Vector3f;
 import net.risingworld.api.utils.Vector3i;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -377,5 +376,3 @@ public class OwnerEventHandler implements Listener {
         checkAndCancel(player, chunkPos, blockPos, "PlayerRemoveWater", "remove water", event);
     }
 }
-
-

@@ -46,11 +46,25 @@ public class AdminTools {
                     for (Map.Entry<String, Integer> entry : counts.entrySet()) {
                         String uid = entry.getKey();
                         int count = entry.getValue();
-                        int max = count + 2;
-                        String sql = db.getDb().executeQuery("SELECT PlayerUID FROM `PlayerAreaStats` WHERE PlayerUID = '" + uid + "'").next() ?
-                            "UPDATE `PlayerAreaStats` SET AreaCount = " + count + ", MaxAreaAllocation = " + max + " WHERE PlayerUID = '" + uid + "'" :
-                            "INSERT INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) VALUES ('" + uid + "', " + count + ", " + max + ")";
+                        int max = count + 2; // Initial max allocation
+                        ResultSet existingStats = db.getDb().executeQuery("SELECT PlayerUID FROM `PlayerAreaStats` WHERE PlayerUID = '" + uid + "'");
+                        String sql;
+                        if (existingStats.next()) {
+                            sql = "UPDATE `PlayerAreaStats` SET AreaCount = " + count + ", MaxAreaAllocation = " + max + " WHERE PlayerUID = '" + uid + "'";
+                        } else {
+                            sql = "INSERT INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) VALUES ('" + uid + "', " + count + ", " + max + ")";
+                        }
                         db.getDb().executeUpdate(sql);
+
+                        // Ensure Points row exists for migrated players
+                        ResultSet pointsRs = db.getDb().executeQuery("SELECT ID FROM `Points` WHERE PlayerUID = '" + uid + "'");
+                        if (!pointsRs.next()) {
+                            db.getDb().executeUpdate(
+                                "INSERT INTO `Points` (PlayerUID, UserName, Points, TotalPlaytimeHours) " +
+                                "VALUES ('" + uid + "', 'MigratedUser', 0, 0.0)"
+                            );
+                            System.out.println("[LandClaim] Initialized Points row for migrated PlayerUID: " + uid);
+                        }
 
                         Player[] allPlayers = Server.getAllPlayers();
                         for (Player owner : allPlayers) {
@@ -60,7 +74,7 @@ public class AdminTools {
                             }
                         }
                     }
-                    lastMigrationResult = "Migration successful!";
+                    lastMigrationResult = "Migration successful! Migrated " + counts.size() + " players.";
                 } catch (SQLException e) {
                     lastMigrationResult = "Migration failed: " + e.getMessage();
                     System.out.println("[LandClaim] Migration error: " + e.getMessage());
@@ -85,5 +99,3 @@ public class AdminTools {
         return lastMigrationResult;
     }
 }
-
-

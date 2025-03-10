@@ -23,4 +23,3 @@ public class PlayerTools {
     public UILabel getUnclaimButton() { return unclaimButton; }
     public UILabel getExitButton() { return exitButton; }
 }
-

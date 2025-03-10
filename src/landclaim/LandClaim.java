@@ -106,7 +106,6 @@ public class LandClaim extends Plugin implements Listener {
             () -> {
                 try {
                     String uid = player.getUID();
-                    // Initialize Points row if it doesn't exist
                     ResultSet rs = database.getDb().executeQuery("SELECT ID FROM `Points` WHERE PlayerUID = '" + escapeSql(uid) + "'");
                     if (!rs.next()) {
                         System.out.println("[LandClaim] Initializing Points row for PlayerUID: " + uid);
@@ -172,9 +171,13 @@ public class LandClaim extends Plugin implements Listener {
                     int newPoints = database.getPoints(uid);
                     double totalHours = database.getTotalPlaytimeHours(uid);
                     int maxAreaAllocation = database.getMaxAreaAllocation(uid);
+                    int pointsEarnedAdjust = database.getPointsEarnedAdjust();
+                    int areaCostAdjust = database.getAreaCostAdjust();
                     player.setAttribute("pointsEarned", newPoints);
                     player.setAttribute("totalHours", totalHours);
                     player.setAttribute("maxAreaAllocation", maxAreaAllocation);
+                    player.setAttribute("pointsEarnedAdjust", pointsEarnedAdjust);
+                    player.setAttribute("areaCostAdjust", areaCostAdjust);
                 } catch (SQLException e) {
                     System.out.println("[LandClaim] Error updating playtime/points on disconnect: " + e.getMessage());
                 }
@@ -183,7 +186,11 @@ public class LandClaim extends Plugin implements Listener {
                 int points = (Integer) player.getAttribute("pointsEarned");
                 double totalHours = (Double) player.getAttribute("totalHours");
                 int maxAreaAllocation = (Integer) player.getAttribute("maxAreaAllocation");
-                player.sendTextMessage("Total playtime: " + String.format("%.3f", totalHours) + " hours, Points: " + points + ", Max Areas: " + maxAreaAllocation);
+                int pointsEarnedAdjust = (Integer) player.getAttribute("pointsEarnedAdjust");
+                int areaCostAdjust = (Integer) player.getAttribute("areaCostAdjust");
+                player.sendTextMessage("Total playtime: " + String.format("%.3f", totalHours) + " hours, " +
+                                       "Points: " + points + ", Max Areas: " + maxAreaAllocation + ", " +
+                                       "Points/Hour: " + pointsEarnedAdjust + ", Area Cost: " + areaCostAdjust);
             }
         );
     }
@@ -215,7 +222,7 @@ public class LandClaim extends Plugin implements Listener {
     public void onPlayerCommand(PlayerCommandEvent event) {
         Player player = event.getPlayer();
         if (!adminTools.isAdmin(player)) {
-            return; // No buyarea command for non-admins since areas are earned via playtime
+            return;
         }
 
         String[] args = event.getCommand().split(" ");
@@ -223,6 +230,64 @@ public class LandClaim extends Plugin implements Listener {
             boolean show = args.length > 1 ? Boolean.parseBoolean(args[1]) : true;
             if (show) showAreas(player); else hideAreas(player);
             player.sendTextMessage("Area visuals " + (show ? "shown" : "hidden") + ".");
+            event.setCancelled(true);
+        } else if (args[0].equalsIgnoreCase("/admin")) {
+            if (args.length < 2) {
+                player.sendTextMessage("Usage: /admin [points|cost|alloc] [+|-]");
+                event.setCancelled(true);
+                return;
+            }
+            taskQueue.queueTask(
+                () -> {
+                    try {
+                        if (args[1].equalsIgnoreCase("points")) {
+                            int current = database.getPointsEarnedAdjust();
+                            int adjust = args[2].equals("+") ? 1 : args[2].equals("-") ? -1 : 0;
+                            if (adjust == 0) {
+                                player.setAttribute("adminResult", "Invalid argument: Use + or -");
+                                return;
+                            }
+                            int newValue = current + adjust;
+                            database.setPointsEarnedAdjust(newValue);
+                            player.setAttribute("adminResult", "Points per hour set to " + newValue);
+                        } else if (args[1].equalsIgnoreCase("cost")) {
+                            int current = database.getAreaCostAdjust();
+                            int adjust = args[2].equals("+") ? 1 : args[2].equals("-") ? -1 : 0;
+                            if (adjust == 0) {
+                                player.setAttribute("adminResult", "Invalid argument: Use + or -");
+                                return;
+                            }
+                            int newValue = current + adjust;
+                            database.setAreaCostAdjust(newValue);
+                            player.setAttribute("adminResult", "Area cost set to " + newValue);
+                        } else if (args[1].equalsIgnoreCase("alloc")) {
+                            String uid = getAreaOwnerUIDFromPosition(player);
+                            if (uid == null) {
+                                player.setAttribute("adminResult", "Stand in a claimed area!");
+                                return;
+                            }
+                            int current = database.getMaxAreaAllocation(uid);
+                            int adjust = args[2].equals("+") ? 1 : args[2].equals("-") ? -1 : 0;
+                            if (adjust == 0) {
+                                player.setAttribute("adminResult", "Invalid argument: Use + or -");
+                                return;
+                            }
+                            int newMax = current + adjust;
+                            if (newMax < 0) {
+                                player.setAttribute("adminResult", "Cannot go below 0!");
+                                return;
+                            }
+                            database.setMaxAreaAllocation(uid, newMax);
+                            player.setAttribute("adminResult", "Max areas for UID " + uid + " set to " + newMax);
+                        } else {
+                            player.setAttribute("adminResult", "Unknown subcommand: " + args[1]);
+                        }
+                    } catch (SQLException e) {
+                        player.setAttribute("adminResult", "Error: " + e.getMessage());
+                    }
+                },
+                () -> player.sendTextMessage((String) player.getAttribute("adminResult"))
+            );
             event.setCancelled(true);
         }
     }
@@ -250,7 +315,7 @@ public class LandClaim extends Plugin implements Listener {
                     int count = getPlayerAreaCountFromDB(uid);
                     int max = database.getMaxAreaAllocation(uid);
                     if (count >= max) {
-                        player.setAttribute("claimResult", "You’ve reached your limit of " + max + " areas!");
+                        player.setAttribute("claimResult", "You’ve reached your limit of " + max + " areas! Buy more with points.");
                         return;
                     }
                     String name = count == 0 ? player.getName() + "'s Home" : player.getName() + "'s Area=" + (count + 1);
@@ -321,8 +386,43 @@ public class LandClaim extends Plugin implements Listener {
     }
 
     public void buyAreaAllocation(Player player) {
-        // Removed since areas are now earned via playtime points
-        player.sendTextMessage("Extra areas are earned automatically with 1 point per hour of playtime!");
+        taskQueue.queueTask(
+            () -> {
+                try {
+                    String uid = player.getUID();
+                    Long loginTime = playerLoginTimes.get(player);
+                    if (loginTime == null) {
+                        player.setAttribute("buyResult", "Error: No login time recorded!");
+                        return;
+                    }
+                    long sessionMs = System.currentTimeMillis() - loginTime;
+                    double sessionHours = sessionMs / 3600000.0;
+                    System.out.println("[LandClaim] Buy clicked for " + player.getName() + ", session time: " + sessionHours + " hours");
+
+                    database.updatePlaytimeAndPoints(uid, sessionHours);
+                    playerLoginTimes.put(player, System.currentTimeMillis());
+
+                    int areaCost = database.getAreaCostAdjust();
+                    int currentPoints = database.getPoints(uid);
+                    if (database.buyAreaAllocation(uid, areaCost)) {
+                        int newMax = database.getMaxAreaAllocation(uid);
+                        int newPoints = database.getPoints(uid);
+                        player.setAttribute("buyResult", "Bought 1 extra area allocation for " + areaCost + " points! New max: " + newMax + ", Points left: " + newPoints);
+                    } else {
+                        player.setAttribute("buyResult", "Not enough points! Need " + areaCost + ", have " + currentPoints);
+                    }
+                } catch (SQLException e) {
+                    player.setAttribute("buyResult", "Error: " + e.getMessage());
+                }
+            },
+            () -> {
+                player.sendTextMessage((String) player.getAttribute("buyResult"));
+                PlayerUIMenu menu = playerMenus.get(player);
+                if (menu != null) {
+                    menu.updateBuyAreaButtonText(); // Refresh UI after purchase attempt
+                }
+            }
+        );
     }
 
     public void loadClaimedAreas() throws SQLException {

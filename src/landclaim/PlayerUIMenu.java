@@ -7,7 +7,6 @@ import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
 import net.risingworld.api.utils.Vector3i;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -23,7 +22,7 @@ public class PlayerUIMenu {
     private UILabel claimButton, removeButton, exitButton, settingsButton, settingsExitButton;
     private UILabel showMyAreasLabel, showAllAreasLabel, infoLabel;
     private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton;
-    private UILabel buyAreaButton; // New button
+    private UILabel buyAreaButton;
     private boolean isVisible, showingMyAreas = false, showingAllAreas = true; // Default to true for connect
     private List<Player> worldPlayers = new ArrayList<>();
     private int currentPlayerIndex = -1, currentAreaId = -1;
@@ -57,7 +56,10 @@ public class PlayerUIMenu {
         showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45); // Initial state On
         exitButton = createButton(menuBase, 10, 210, "Exit", 250, 45);
         settingsButton = createButton(menuBase, 10, 260, "Settings", 250, 45);
-        buyAreaButton = createButton(menuBase, 10, 310, "increase Area Limit (10 pts)", 250, 45); // New button
+        
+        // Initial buyAreaButton setup
+        updateBuyAreaButtonText();
+        buyAreaButton = createButton(menuBase, 10, 310, getBuyAreaButtonText(), 250, 45);
     }
 
     private void setupSettingsMenu() {
@@ -155,6 +157,26 @@ public class PlayerUIMenu {
         return label;
     }
 
+    private String getBuyAreaButtonText() {
+        int areaCost = 1;
+        int playerPoints = 0;
+        try {
+            areaCost = plugin.getDatabase().getAreaCostAdjust();
+            playerPoints = plugin.getDatabase().getPoints(player.getUID());
+        } catch (SQLException e) {
+            System.out.println("[PlayerUIMenu] Error fetching area cost or points: " + e.getMessage());
+        }
+        return "<b>Buy Extra Area (" + areaCost + " pts, You: " + playerPoints + ")</b>";
+    }
+
+    public void updateBuyAreaButtonText() {
+        if (buyAreaButton != null) {
+            String newText = getBuyAreaButtonText();
+            buyAreaButton.setText(newText);
+            System.out.println("[PlayerUIMenu] Updated buyAreaButton text for " + player.getName() + ": " + newText);
+        }
+    }
+
     public void showSettingsMenu() throws SQLException {
         Vector3i chunk = player.getChunkPosition();
         LandClaim.ClaimedArea area = plugin.getClaimedAreaAt(chunk);
@@ -235,7 +257,10 @@ public class PlayerUIMenu {
         isVisible = !isVisible;
         menuBase.setVisible(isVisible);
         player.setMouseCursorVisible(isVisible);
-        if (isVisible) updateAreaVisibility(); // Refresh visibility when menu opens
+        if (isVisible) {
+            updateBuyAreaButtonText(); // Refresh points display when menu opens
+            updateAreaVisibility(); // Refresh visibility when menu opens
+        }
     }
 
     public void closeMenu() {
@@ -421,5 +446,5 @@ public class PlayerUIMenu {
     public UILabel getShowMyAreasLabel() { return showMyAreasLabel; }
     public UILabel getShowAllAreasLabel() { return showAllAreasLabel; }
     public UILabel getSettingsExitButton() { return settingsExitButton; }
-    public UILabel getBuyAreaButton() { return buyAreaButton; } // New getter
+    public UILabel getBuyAreaButton() { return buyAreaButton; }
 }

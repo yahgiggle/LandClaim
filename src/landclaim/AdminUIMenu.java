@@ -33,7 +33,6 @@ public class AdminUIMenu {
         menu.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
         menu.setVisible(true);
         menu.style.borderBottomWidth.set(5);
-        
 
         UILabel button = createButton(menu, 10, 10, "<b>Admin Tools</b>", 180, 45);
         player.setAttribute("adminToolsButton", button);
@@ -57,13 +56,14 @@ public class AdminUIMenu {
         player.setAttribute("migrateButton", createButton(popup, 10, 60, "<b>Migrate old WP Database</b>", 250, 45));
         player.setAttribute("maxPlusButton", createButton(popup, 270, 60, "<b>+ MaxAreaAllocation</b>", 250, 45));
         player.setAttribute("maxMinusButton", createButton(popup, 530, 60, "<b>- MaxAreaAllocation</b>", 250, 45));
+        
+        // Buttons for points and cost adjustments (still relevant for manual system)
+        player.setAttribute("pointsPlusButton", createButton(popup, 10, 115, "<b>+ Points/Hour</b>", 250, 45));
+        player.setAttribute("pointsMinusButton", createButton(popup, 270, 115, "<b>- Points/Hour</b>", 250, 45));
+        player.setAttribute("costPlusButton", createButton(popup, 10, 170, "<b>+ Area Cost</b>", 250, 45));
+        player.setAttribute("costMinusButton", createButton(popup, 270, 170, "<b>- Area Cost</b>", 250, 45));
+        
         player.setAttribute("adminPopupExitButton", createButton(popup, 745, 5, "<color=red><b>X</b></color>", 45, 45));
-        
-        
-     //   UILabel exit = createButton(popup, 745, 5, "<b>X</b>", 45, 45);
-     //   exit.setFontColor(1.0f, 0.0f, 0.0f, 1.0f);
-     //   exit.setFontSize(18);
-      //  player.setAttribute("adminPopupExitButton", exit);
     }
 
     private UILabel createButton(UIElement parent, int x, int y, String text, int width, int height) {
@@ -99,11 +99,8 @@ public class AdminUIMenu {
         label.setBorder(2);
         label.setBorderColor(999);
         label.setBackgroundColor(500);
-  
-        
         label.setPosition(x, y, false);
         parent.addChild(label);
         return label;
     }
 }
-
