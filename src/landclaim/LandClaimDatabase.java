@@ -38,7 +38,7 @@ public class LandClaimDatabase {
         String[] tableScripts = {
             "CREATE TABLE IF NOT EXISTS `Areas` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaOwnerName` VARCHAR(64), `AreaName` VARCHAR(64), `AreaX` INTEGER, `AreaY` INTEGER, `AreaZ` INTEGER, `PlayerUID` BIGINT, `AreaLocked` BOOLEAN DEFAULT 0, `PVPStatus` BOOLEAN DEFAULT 0, `CreationDate` DATE);",
             "CREATE TABLE IF NOT EXISTS `Guests` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `AreaID` INTEGER, `GuestName` VARCHAR(64), `PlayerUID` BIGINT, FOREIGN KEY (AreaID) REFERENCES Areas(ID));",
-            "CREATE TABLE IF NOT EXISTS `Points` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `UserName` VARCHAR(64), `Points` INTEGER, `PlayerUID` BIGINT);",
+            "CREATE TABLE IF NOT EXISTS `Points` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `UserName` VARCHAR(64), `Points` INTEGER DEFAULT 0, `PlayerUID` BIGINT, `TotalPlaytimeHours` DOUBLE DEFAULT 0.0);",
             "CREATE TABLE IF NOT EXISTS `AdminSettings` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `PointsEarnedAdjust` INTEGER, `AreaCostAdjust` INTEGER);",
             "CREATE TABLE IF NOT EXISTS `DataBaseVersion` (`ID` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `Version` INTEGER);",
             "CREATE TABLE IF NOT EXISTS `PlayerAreaStats` (`PlayerUID` BIGINT PRIMARY KEY NOT NULL, `AreaCount` INTEGER DEFAULT 0, `MaxAreaAllocation` INTEGER DEFAULT 2);",
@@ -304,6 +304,82 @@ public class LandClaimDatabase {
         return rs.next() ? rs.getInt("ID") : -1;
     }
 
+    public void addPoints(String playerUID, int points) throws SQLException {
+        String sql = "UPDATE `Points` SET Points = Points + " + points + " WHERE PlayerUID = '" + escapeSql(playerUID) + "'";
+        db.executeUpdate(sql);
+    }
+
+    public int getPoints(String playerUID) throws SQLException {
+        ResultSet rs = db.executeQuery("SELECT Points FROM `Points` WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+        return rs.next() ? rs.getInt("Points") : 0;
+    }
+
+    public void deductPoints(String playerUID, int points) throws SQLException {
+        String sql = "UPDATE `Points` SET Points = Points - " + points + " WHERE PlayerUID = '" + escapeSql(playerUID) + "' AND Points >= " + points;
+        db.executeUpdate(sql);
+        int remainingPoints = getPoints(playerUID);
+        if (remainingPoints < 0) {
+            throw new SQLException("Points deduction failed: insufficient points after update!");
+        }
+    }
+
+    public void updatePlaytimeAndPoints(String playerUID, double sessionHours) throws SQLException {
+        // Minimum session time threshold (1 second = 1/3600 hours)
+        if (sessionHours < 1.0 / 3600.0) {
+            System.out.println("[LandClaim] Session time too short for PlayerUID: " + playerUID + " (" + sessionHours + " hours), skipping update.");
+            return;
+        }
+
+        System.out.println("[LandClaim] Updating playtime for PlayerUID: " + playerUID + ", Session Hours: " + sessionHours);
+        // Get current playtime and points before update
+        ResultSet rsBefore = db.executeQuery("SELECT TotalPlaytimeHours, Points FROM `Points` WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+        double previousHours = 0.0;
+        int previousPoints = 0;
+        if (rsBefore.next()) {
+            previousHours = rsBefore.getDouble("TotalPlaytimeHours");
+            previousPoints = rsBefore.getInt("Points");
+        } else {
+            System.out.println("[LandClaim] No Points row found for PlayerUID: " + playerUID + " before update!");
+            return;
+        }
+        System.out.println("[LandClaim] Before update - PlayerUID: " + playerUID + ", TotalPlaytimeHours: " + previousHours + ", Points: " + previousPoints);
+
+        // Update TotalPlaytimeHours
+        String sql = "UPDATE `Points` SET TotalPlaytimeHours = TotalPlaytimeHours + " + sessionHours +
+                     " WHERE PlayerUID = '" + escapeSql(playerUID) + "'";
+        db.executeUpdate(sql);
+        System.out.println("[LandClaim] Playtime update executed for PlayerUID: " + playerUID);
+
+        // Check updated values and calculate new points
+        ResultSet rsAfter = db.executeQuery("SELECT TotalPlaytimeHours, Points FROM `Points` WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+        if (rsAfter.next()) {
+            double totalHours = rsAfter.getDouble("TotalPlaytimeHours");
+            int currentPoints = rsAfter.getInt("Points");
+            System.out.println("[LandClaim] After update - PlayerUID: " + playerUID + ", TotalPlaytimeHours: " + totalHours + ", Points: " + currentPoints);
+
+            // Award 1 point per 1 hour of playtime
+            int newPoints = (int) Math.floor(totalHours); // 1 point per hour
+            int pointsToAdd = newPoints - currentPoints;
+            if (pointsToAdd > 0) {
+                System.out.println("[LandClaim] Adding " + pointsToAdd + " points to PlayerUID: " + playerUID + " (Total Hours: " + totalHours + ")");
+                addPoints(playerUID, pointsToAdd);
+                // Increase MaxAreaAllocation by the number of new points
+                int newMaxAreaAllocation = getMaxAreaAllocation(playerUID) + pointsToAdd;
+                setMaxAreaAllocation(playerUID, newMaxAreaAllocation);
+                System.out.println("[LandClaim] Updated MaxAreaAllocation to " + newMaxAreaAllocation + " for PlayerUID: " + playerUID);
+            } else {
+                System.out.println("[LandClaim] No new points to add for PlayerUID: " + playerUID + " (Total Hours: " + totalHours + ", Current Points: " + currentPoints + ")");
+            }
+        } else {
+            System.out.println("[LandClaim] No Points row found for PlayerUID: " + playerUID + " after update!");
+        }
+    }
+
+    public double getTotalPlaytimeHours(String playerUID) throws SQLException {
+        ResultSet rs = db.executeQuery("SELECT TotalPlaytimeHours FROM `Points` WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+        return rs.next() ? rs.getDouble("TotalPlaytimeHours") : 0.0;
+    }
+
     private String escapeSql(String input) {
         return input == null ? "" : input.replace("'", "''");
     }
@@ -338,4 +414,3 @@ public class LandClaimDatabase {
         );
     }
 }
-

@@ -7,6 +7,7 @@ import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.EventMethod;
 import net.risingworld.api.events.player.PlayerCommandEvent;
 import net.risingworld.api.events.player.PlayerConnectEvent;
+import net.risingworld.api.events.player.PlayerDisconnectEvent;
 import net.risingworld.api.events.player.PlayerEnterChunkEvent;
 import net.risingworld.api.events.player.PlayerKeyEvent;
 import net.risingworld.api.objects.Player;
@@ -34,6 +35,7 @@ public class LandClaim extends Plugin implements Listener {
     public HashMap<Player, PlayerUIMenu> playerMenus = new HashMap<>();
     private HashMap<Player, PlayerTools> playerTools = new HashMap<>();
     private HashMap<Player, Vector3i> playerChunks = new HashMap<>();
+    private HashMap<Player, Long> playerLoginTimes = new HashMap<>();
     HashMap<Vector3i, ClaimedArea> claimedAreasByChunk = new HashMap<>();
     protected static ArrayList<Area3D> AllClaimedAreas = new ArrayList<>();
     protected static HashMap<String, ArrayList<Area3D>> UserClaimedAreas = new HashMap<>();
@@ -71,6 +73,7 @@ public class LandClaim extends Plugin implements Listener {
         UserClaimedAreas.clear();
         areasLoaded = false;
         System.out.println("[LandClaim] Initialized and listeners registered.");
+        System.out.println("[LandClaim] Points system initialized.");
     }
 
     @Override
@@ -84,6 +87,7 @@ public class LandClaim extends Plugin implements Listener {
     public void onPlayerConnect(PlayerConnectEvent event) {
         Player player = event.getPlayer();
         player.registerKeys(Key.L, Key.LeftShift);
+        playerLoginTimes.put(player, System.currentTimeMillis());
 
         PlayerUIMenu menu = new PlayerUIMenu(player, this);
         playerMenus.put(player, menu);
@@ -102,6 +106,17 @@ public class LandClaim extends Plugin implements Listener {
             () -> {
                 try {
                     String uid = player.getUID();
+                    // Initialize Points row if it doesn't exist
+                    ResultSet rs = database.getDb().executeQuery("SELECT ID FROM `Points` WHERE PlayerUID = '" + escapeSql(uid) + "'");
+                    if (!rs.next()) {
+                        System.out.println("[LandClaim] Initializing Points row for PlayerUID: " + uid);
+                        String sql = "INSERT INTO `Points` (PlayerUID, UserName, Points, TotalPlaytimeHours) " +
+                                     "VALUES ('" + escapeSql(uid) + "', '" + escapeSql(player.getName()) + "', 0, 0.0)";
+                        database.getDb().executeUpdate(sql);
+                    } else {
+                        System.out.println("[LandClaim] Points row already exists for PlayerUID: " + uid);
+                    }
+
                     int areaCount = getPlayerAreaCountFromDB(uid);
                     if (areaCount == 0) database.setMaxAreaAllocation(uid, 2);
                 } catch (SQLException e) {
@@ -112,7 +127,7 @@ public class LandClaim extends Plugin implements Listener {
                 addAreaInfoLabel(player);
                 updateAreaInfoLabel(player, initialChunk);
                 myAreasVisible.put(player, false);
-                allAreasVisible.put(player, true); // Sync with PlayerUIMenu default
+                allAreasVisible.put(player, true);
                 if (!areasLoaded) {
                     try {
                         loadClaimedAreas();
@@ -121,11 +136,10 @@ public class LandClaim extends Plugin implements Listener {
                         System.out.println("[LandClaim] Failed to load areas: " + e.getMessage());
                     }
                 }
-                menu.updateVisibleAreas(initialChunk); // Load initial areas
-                menu.updateAreaVisibility(); // Show all areas immediately
-                showAreasOnConnect(player); // Optional hint
+                menu.updateVisibleAreas(initialChunk);
+                menu.updateAreaVisibility();
+                showAreasOnConnect(player);
 
-                // Start a 60-second timer to disable "Show All Areas"
                 new Timer(60.0f, 0f, 0, () -> {
                     PlayerUIMenu currentMenu = playerMenus.get(player);
                     if (currentMenu != null) {
@@ -133,6 +147,43 @@ public class LandClaim extends Plugin implements Listener {
                         allAreasVisible.put(player, false);
                     }
                 }).start();
+            }
+        );
+    }
+
+    @EventMethod
+    public void onPlayerDisconnect(PlayerDisconnectEvent event) {
+        Player player = event.getPlayer();
+        Long loginTime = playerLoginTimes.remove(player);
+        if (loginTime == null) {
+            System.out.println("[LandClaim] No login time found for Player: " + player.getName());
+            return;
+        }
+
+        long playtimeMs = System.currentTimeMillis() - loginTime;
+        double sessionHours = playtimeMs / 3600000.0;
+        System.out.println("[LandClaim] Player " + player.getName() + " disconnected. Session time: " + playtimeMs + "ms (" + sessionHours + " hours)");
+
+        taskQueue.queueTask(
+            () -> {
+                try {
+                    String uid = player.getUID();
+                    database.updatePlaytimeAndPoints(uid, sessionHours);
+                    int newPoints = database.getPoints(uid);
+                    double totalHours = database.getTotalPlaytimeHours(uid);
+                    int maxAreaAllocation = database.getMaxAreaAllocation(uid);
+                    player.setAttribute("pointsEarned", newPoints);
+                    player.setAttribute("totalHours", totalHours);
+                    player.setAttribute("maxAreaAllocation", maxAreaAllocation);
+                } catch (SQLException e) {
+                    System.out.println("[LandClaim] Error updating playtime/points on disconnect: " + e.getMessage());
+                }
+            },
+            () -> {
+                int points = (Integer) player.getAttribute("pointsEarned");
+                double totalHours = (Double) player.getAttribute("totalHours");
+                int maxAreaAllocation = (Integer) player.getAttribute("maxAreaAllocation");
+                player.sendTextMessage("Total playtime: " + String.format("%.3f", totalHours) + " hours, Points: " + points + ", Max Areas: " + maxAreaAllocation);
             }
         );
     }
@@ -163,7 +214,9 @@ public class LandClaim extends Plugin implements Listener {
     @EventMethod
     public void onPlayerCommand(PlayerCommandEvent event) {
         Player player = event.getPlayer();
-        if (!adminTools.isAdmin(player)) return;
+        if (!adminTools.isAdmin(player)) {
+            return; // No buyarea command for non-admins since areas are earned via playtime
+        }
 
         String[] args = event.getCommand().split(" ");
         if (args[0].equalsIgnoreCase("/showareas")) {
@@ -265,6 +318,11 @@ public class LandClaim extends Plugin implements Listener {
                 }
             }
         );
+    }
+
+    public void buyAreaAllocation(Player player) {
+        // Removed since areas are now earned via playtime points
+        player.sendTextMessage("Extra areas are earned automatically with 1 point per hour of playtime!");
     }
 
     public void loadClaimedAreas() throws SQLException {

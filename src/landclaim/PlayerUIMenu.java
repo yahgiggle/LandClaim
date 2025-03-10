@@ -23,6 +23,7 @@ public class PlayerUIMenu {
     private UILabel claimButton, removeButton, exitButton, settingsButton, settingsExitButton;
     private UILabel showMyAreasLabel, showAllAreasLabel, infoLabel;
     private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton;
+    private UILabel buyAreaButton; // New button
     private boolean isVisible, showingMyAreas = false, showingAllAreas = true; // Default to true for connect
     private List<Player> worldPlayers = new ArrayList<>();
     private int currentPlayerIndex = -1, currentAreaId = -1;
@@ -41,7 +42,7 @@ public class PlayerUIMenu {
     private void setupBaseMenu() {
         menuBase = new UIElement();
         player.addUIElement(menuBase);
-        menuBase.setSize(276, 320, false);
+        menuBase.setSize(276, 370, false); // Increased height to accommodate new button
         menuBase.setClickable(false);
         menuBase.setPosition(45, 45, true);
         menuBase.setBorderEdgeRadius(5.0f, false);
@@ -56,6 +57,7 @@ public class PlayerUIMenu {
         showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45); // Initial state On
         exitButton = createButton(menuBase, 10, 210, "Exit", 250, 45);
         settingsButton = createButton(menuBase, 10, 260, "Settings", 250, 45);
+        buyAreaButton = createButton(menuBase, 10, 310, "increase Area Limit (10 pts)", 250, 45); // New button
     }
 
     private void setupSettingsMenu() {
@@ -260,7 +262,6 @@ public class PlayerUIMenu {
         System.out.println("[PlayerUIMenu] Toggle All Areas: " + showingAllAreas + " for " + player.getName());
     }
 
-    // New method to allow LandClaim to disable "Show All Areas"
     public void disableAllAreas() {
         showingAllAreas = false;
         updateAreaVisibility();
@@ -420,4 +421,5 @@ public class PlayerUIMenu {
     public UILabel getShowMyAreasLabel() { return showMyAreasLabel; }
     public UILabel getShowAllAreasLabel() { return showAllAreasLabel; }
     public UILabel getSettingsExitButton() { return settingsExitButton; }
+    public UILabel getBuyAreaButton() { return buyAreaButton; } // New getter
 }

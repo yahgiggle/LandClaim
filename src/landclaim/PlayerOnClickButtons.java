@@ -62,6 +62,8 @@ public class PlayerOnClickButtons implements Listener {
             menu.toggleMyAreas();
         } else if (element == menu.getShowAllAreasLabel()) {
             menu.toggleAllAreas();
+        } else if (element == menu.getBuyAreaButton()) {
+            plugin.buyAreaAllocation(player); // Now accessible since it’s public
         } else if (element == player.getAttribute("nextPlayerButton")) {
             menu.nextPlayer();
         } else if (element == player.getAttribute("backPlayerButton")) {
@@ -85,4 +87,3 @@ public class PlayerOnClickButtons implements Listener {
         plugin.registerEventListener(this);
     }
 }
-
