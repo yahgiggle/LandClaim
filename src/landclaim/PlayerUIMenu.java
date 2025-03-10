@@ -54,12 +54,12 @@ public class PlayerUIMenu {
         removeButton = createButton(menuBase, 10, 60, "Remove Area", 250, 45);
         showMyAreasLabel = createButton(menuBase, 10, 110, "Show My Areas\nOff", 250, 45);
         showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45); // Initial state On
-        exitButton = createButton(menuBase, 10, 210, "Exit", 250, 45);
+        exitButton = createButton(menuBase, 10, 310, "Exit", 250, 45); // exit button
         settingsButton = createButton(menuBase, 10, 260, "Settings", 250, 45);
         
         // Initial buyAreaButton setup
         updateBuyAreaButtonText();
-        buyAreaButton = createButton(menuBase, 10, 310, getBuyAreaButtonText(), 250, 45);
+        buyAreaButton = createButton(menuBase, 10, 210, getBuyAreaButtonText(), 250, 45);  // buy button
     }
 
     private void setupSettingsMenu() {
@@ -81,7 +81,7 @@ public class PlayerUIMenu {
         backPlayerButton = createButton(settingsMenu, 320, 60, "Back Player", 300, 45);
         addGuestButton = createButton(settingsMenu, 630, 60, "Add Guest", 300, 45);
         removeGuestButton = createButton(settingsMenu, 940, 60, "Remove Guest", 300, 45);
-        settingsExitButton = createButton(settingsMenu, 1511, 5, "<color=red><b>X</b></color>", 45, 45);
+        settingsExitButton = createButton(settingsMenu, 1511, 5, "<color=red><b>X</b></color>", 45, 45); 
         player.setAttribute("settingsExitButton", settingsExitButton);
 
         player.setAttribute("nextPlayerButton", nextPlayerButton);
@@ -166,7 +166,7 @@ public class PlayerUIMenu {
         } catch (SQLException e) {
             System.out.println("[PlayerUIMenu] Error fetching area cost or points: " + e.getMessage());
         }
-        return "<b>Buy Extra Area (" + areaCost + " pts, You: " + playerPoints + ")</b>";
+        return "<b>Buy 1 Area (" + areaCost + " Cost, You: " + playerPoints + ")</b>";
     }
 
     public void updateBuyAreaButtonText() {
@@ -258,8 +258,27 @@ public class PlayerUIMenu {
         menuBase.setVisible(isVisible);
         player.setMouseCursorVisible(isVisible);
         if (isVisible) {
-            updateBuyAreaButtonText(); // Refresh points display when menu opens
-            updateAreaVisibility(); // Refresh visibility when menu opens
+            // Update playtime and points when menu opens
+            plugin.getTaskQueue().queueTask(
+                () -> {
+                    try {
+                        Long loginTime = plugin.playerLoginTimes.get(player);
+                        if (loginTime != null) {
+                            long sessionMs = System.currentTimeMillis() - loginTime;
+                            double sessionHours = sessionMs / 3600000.0;
+                            plugin.getDatabase().updatePlaytimeAndPoints(player.getUID(), sessionHours);
+                            plugin.playerLoginTimes.put(player, System.currentTimeMillis());
+                            System.out.println("[PlayerUIMenu] Updated playtime on menu open for " + player.getName() + ": " + sessionHours + " hours");
+                        }
+                    } catch (SQLException e) {
+                        System.out.println("[PlayerUIMenu] Error updating playtime on menu open: " + e.getMessage());
+                    }
+                },
+                () -> {
+                    updateBuyAreaButtonText(); // Refresh points display after update
+                    updateAreaVisibility(); // Refresh visibility when menu opens
+                }
+            );
         }
     }
 

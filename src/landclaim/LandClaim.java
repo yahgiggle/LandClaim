@@ -35,7 +35,7 @@ public class LandClaim extends Plugin implements Listener {
     public HashMap<Player, PlayerUIMenu> playerMenus = new HashMap<>();
     private HashMap<Player, PlayerTools> playerTools = new HashMap<>();
     private HashMap<Player, Vector3i> playerChunks = new HashMap<>();
-    private HashMap<Player, Long> playerLoginTimes = new HashMap<>();
+    public HashMap<Player, Long> playerLoginTimes = new HashMap<>();
     HashMap<Vector3i, ClaimedArea> claimedAreasByChunk = new HashMap<>();
     protected static ArrayList<Area3D> AllClaimedAreas = new ArrayList<>();
     protected static HashMap<String, ArrayList<Area3D>> UserClaimedAreas = new HashMap<>();
@@ -249,7 +249,7 @@ public class LandClaim extends Plugin implements Listener {
                             }
                             int newValue = current + adjust;
                             database.setPointsEarnedAdjust(newValue);
-                            player.setAttribute("adminResult", "Points per hour set to " + newValue);
+                            player.setAttribute("adminResult", "Points per hour set to " + newValue + ". All player points recalculated.");
                         } else if (args[1].equalsIgnoreCase("cost")) {
                             int current = database.getAreaCostAdjust();
                             int adjust = args[2].equals("+") ? 1 : args[2].equals("-") ? -1 : 0;
@@ -399,20 +399,43 @@ public class LandClaim extends Plugin implements Listener {
                     double sessionHours = sessionMs / 3600000.0;
                     System.out.println("[LandClaim] Buy clicked for " + player.getName() + ", session time: " + sessionHours + " hours");
 
+                    // Update playtime and points for this session
                     database.updatePlaytimeAndPoints(uid, sessionHours);
-                    playerLoginTimes.put(player, System.currentTimeMillis());
 
                     int areaCost = database.getAreaCostAdjust();
                     int currentPoints = database.getPoints(uid);
-                    if (database.buyAreaAllocation(uid, areaCost)) {
-                        int newMax = database.getMaxAreaAllocation(uid);
-                        int newPoints = database.getPoints(uid);
-                        player.setAttribute("buyResult", "Bought 1 extra area allocation for " + areaCost + " points! New max: " + newMax + ", Points left: " + newPoints);
-                    } else {
+                    double currentHours = database.getTotalPlaytimeHours(uid);
+                    int pointsEarnedAdjust = database.getPointsEarnedAdjust();
+
+                    if (currentPoints < areaCost) {
                         player.setAttribute("buyResult", "Not enough points! Need " + areaCost + ", have " + currentPoints);
+                        playerLoginTimes.put(player, System.currentTimeMillis());
+                        return;
                     }
+
+                    // Calculate hours to deduct based on points spent
+                    double hoursToDeduct = (double) areaCost / pointsEarnedAdjust;
+                    if (currentHours < hoursToDeduct) {
+                        player.setAttribute("buyResult", "Not enough playtime hours! Need " + hoursToDeduct + ", have " + currentHours);
+                        playerLoginTimes.put(player, System.currentTimeMillis());
+                        return;
+                    }
+
+                    // Deduct points and hours using database methods
+                    database.deductPoints(uid, areaCost);
+                    database.deductHours(uid, hoursToDeduct);
+
+                    int newMax = database.getMaxAreaAllocation(uid) + 1;
+                    database.setMaxAreaAllocation(uid, newMax);
+
+                    int newPoints = database.getPoints(uid);
+                    double newHours = database.getTotalPlaytimeHours(uid);
+                    player.setAttribute("buyResult", "Bought 1 extra area allocation for " + areaCost + " points! " +
+                                                    "New max: " + newMax + ", Points left: " + newPoints + ", Hours left: " + String.format("%.3f", newHours));
+                    playerLoginTimes.put(player, System.currentTimeMillis());
                 } catch (SQLException e) {
                     player.setAttribute("buyResult", "Error: " + e.getMessage());
+                    playerLoginTimes.put(player, System.currentTimeMillis());
                 }
             },
             () -> {

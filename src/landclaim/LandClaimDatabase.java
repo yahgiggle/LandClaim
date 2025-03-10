@@ -339,6 +339,21 @@ public class LandClaimDatabase {
         }
     }
 
+    public void deductHours(String playerUID, double hours) throws SQLException {
+        double currentHours = getTotalPlaytimeHours(playerUID);
+        if (currentHours < hours) {
+            throw new SQLException("Hours deduction failed: insufficient hours! Need " + hours + ", have " + currentHours);
+        }
+        String sql = "UPDATE `Points` SET TotalPlaytimeHours = TotalPlaytimeHours - " + hours + 
+                     " WHERE PlayerUID = '" + escapeSql(playerUID) + "'";
+        db.executeUpdate(sql);
+        double newHours = getTotalPlaytimeHours(playerUID);
+        if (Math.abs(newHours - (currentHours - hours)) > 0.001) { // Tolerance for floating-point precision
+            throw new SQLException("Hours deduction failed: update did not apply correctly! Expected " + (currentHours - hours) + ", got " + newHours);
+        }
+        System.out.println("[LandClaim] Deducted " + hours + " hours for PlayerUID: " + playerUID + ". New hours: " + newHours);
+    }
+
     public boolean buyAreaAllocation(String playerUID, int areaCost) throws SQLException {
         int currentPoints = getPoints(playerUID);
         if (currentPoints < areaCost) {
@@ -374,21 +389,36 @@ public class LandClaimDatabase {
         }
         System.out.println("[LandClaim] Before update - PlayerUID: " + playerUID + ", TotalPlaytimeHours: " + previousHours + ", Points: " + previousPoints);
 
+        // Update playtime
         String sql = "UPDATE `Points` SET TotalPlaytimeHours = TotalPlaytimeHours + " + sessionHours +
                      " WHERE PlayerUID = '" + escapeSql(playerUID) + "'";
         db.executeUpdate(sql);
         System.out.println("[LandClaim] Playtime update executed for PlayerUID: " + playerUID);
 
+        // Recalculate points based on new total hours
         int pointsEarnedAdjust = getPointsEarnedAdjust();
         double newTotalHours = previousHours + sessionHours;
         int newPoints = (int) Math.floor(newTotalHours * pointsEarnedAdjust);
-        int pointsToAdd = newPoints - previousPoints;
-        if (pointsToAdd > 0) {
-            System.out.println("[LandClaim] Adding " + pointsToAdd + " points to PlayerUID: " + playerUID + " (Total Hours: " + newTotalHours + ", PointsEarnedAdjust: " + pointsEarnedAdjust + ")");
-            addPoints(playerUID, pointsToAdd);
-        } else {
-            System.out.println("[LandClaim] No new points to add for PlayerUID: " + playerUID + " (Total Hours: " + newTotalHours + ", Current Points: " + previousPoints + ")");
+        System.out.println("[LandClaim] Calculated new points for PlayerUID: " + playerUID + " - Total Hours: " + newTotalHours + ", PointsEarnedAdjust: " + pointsEarnedAdjust + ", New Points: " + newPoints);
+
+        // Always set points to the new calculated value, allowing decrease
+        db.executeUpdate("UPDATE `Points` SET Points = " + newPoints + " WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+        System.out.println("[LandClaim] Points set to " + newPoints + " for PlayerUID: " + playerUID + " (Previous: " + previousPoints + ")");
+    }
+
+    public void recalculateAllPlayerPoints() throws SQLException {
+        int pointsEarnedAdjust = getPointsEarnedAdjust();
+        ResultSet rs = db.executeQuery("SELECT PlayerUID, TotalPlaytimeHours FROM `Points`");
+        int updatedRows = 0;
+        while (rs.next()) {
+            String playerUID = rs.getString("PlayerUID");
+            double totalHours = rs.getDouble("TotalPlaytimeHours");
+            int newPoints = (int) Math.floor(totalHours * pointsEarnedAdjust);
+            db.executeUpdate("UPDATE `Points` SET Points = " + newPoints + " WHERE PlayerUID = '" + escapeSql(playerUID) + "'");
+            updatedRows++;
+            System.out.println("[LandClaim] Recalculated points for PlayerUID: " + playerUID + ", Hours: " + totalHours + ", New Points: " + newPoints);
         }
+        System.out.println("[LandClaim] All player points recalculated with PointsEarnedAdjust: " + pointsEarnedAdjust + ". Updated " + updatedRows + " rows.");
     }
 
     public double getTotalPlaytimeHours(String playerUID) throws SQLException {
@@ -405,6 +435,7 @@ public class LandClaimDatabase {
         if (value < 0) value = 0;
         db.executeUpdate("UPDATE `AdminSettings` SET PointsEarnedAdjust = " + value + " WHERE ID = 1");
         System.out.println("[LandClaim] PointsEarnedAdjust set to " + value);
+        recalculateAllPlayerPoints(); // Recalculate all points after update
     }
 
     public int getAreaCostAdjust() throws SQLException {
