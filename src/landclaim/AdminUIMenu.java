@@ -10,6 +10,14 @@ import net.risingworld.api.ui.style.TextAnchor;
 public class AdminUIMenu {
     private final LandClaim plugin;
     private final AdminTools adminTools;
+    private UIElement adminMenu;
+    private UILabel adminToolsButton;
+    private UIElement popup;
+    private UILabel feedbackPanel;
+    private UILabel migrateButton;
+    private UILabel maxPlusButton;
+    private UILabel maxMinusButton;
+    private UILabel exitButton;
 
     public AdminUIMenu(LandClaim plugin, AdminTools adminTools) {
         this.plugin = plugin;
@@ -22,7 +30,22 @@ public class AdminUIMenu {
             return;
         }
 
-        UIElement adminMenu = new UIElement();
+        if (adminMenu == null) {
+            createAdminMenu(player);
+        }
+        adminMenu.setVisible(true);
+    }
+
+    public void showAdminToolsPopup(Player player) {
+        if (popup == null) {
+            createPopup(player);
+        }
+        popup.setVisible(true);
+        player.setMouseCursorVisible(true);
+    }
+
+    private void createAdminMenu(Player player) {
+        adminMenu = new UIElement();
         player.addUIElement(adminMenu, UITarget.IngameMenu);
         adminMenu.setSize(206, 66, false);
         adminMenu.setClickable(false);
@@ -33,30 +56,12 @@ public class AdminUIMenu {
         adminMenu.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.95f);
         adminMenu.setVisible(true);
 
-        UILabel adminToolsButton = new UILabel();
-        adminToolsButton.setClickable(true);
-        adminToolsButton.setText("<b>Admin Tools</b>");
-        adminToolsButton.setFont(Font.Medieval);
-        adminToolsButton.style.textAlign.set(TextAnchor.MiddleCenter);
-        adminToolsButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        adminToolsButton.setFontSize(16);
-        adminToolsButton.setSize(180, 45, false);
-        adminToolsButton.setBorder(2);
-        adminToolsButton.setBorderColor(999);
-        adminToolsButton.setBackgroundColor(500);
-        adminToolsButton.setPosition(10, 10, false);
-        adminToolsButton.style.borderBottomWidth.set(5);
-        adminToolsButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
-        adminToolsButton.hoverStyle.borderBottomWidth.set(5);
-        adminToolsButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
-
-        adminMenu.addChild(adminToolsButton);
-        
+        adminToolsButton = createButton(adminMenu, 10, 10, "<b>Admin Tools</b>", 180, 45);
         player.setAttribute("adminToolsButton", adminToolsButton);
     }
 
-    public void showAdminToolsPopup(Player player) {
-        UIElement popup = new UIElement();
+    private void createPopup(Player player) {
+        popup = new UIElement();
         player.addUIElement(popup, UITarget.IngameMenu);
         popup.setSize(800, 600, false);
         popup.setClickable(false);
@@ -67,98 +72,59 @@ public class AdminUIMenu {
         popup.setBackgroundColor(0.9f, 0.9f, 0.9f, 0.9f);
         popup.setVisible(true);
 
-        UILabel FeedBackinfoPanel = new UILabel();
-        FeedBackinfoPanel.setClickable(false);
-        FeedBackinfoPanel.setText("Info");
-        FeedBackinfoPanel.setFont(Font.Medieval);
-        FeedBackinfoPanel.style.textAlign.set(TextAnchor.MiddleCenter);
-        FeedBackinfoPanel.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        FeedBackinfoPanel.setFontSize(16);
-        FeedBackinfoPanel.setSize(730, 45, false);
-        FeedBackinfoPanel.setBorder(2);
-        FeedBackinfoPanel.setBorderColor(999);
-        FeedBackinfoPanel.setBackgroundColor(500);
-        FeedBackinfoPanel.setPosition(10, 5, false);
-        player.setAttribute("FeedBackinfoPanel", FeedBackinfoPanel);
-        popup.addChild(FeedBackinfoPanel);
+        feedbackPanel = createLabel(popup, 10, 5, "Info", 730, 45, false);
+        player.setAttribute("FeedBackinfoPanel", feedbackPanel);
 
-        UILabel migrateButton = new UILabel();
-        migrateButton.setClickable(true);
-        migrateButton.setText("<b>Migrate old WP Database</b>");
-        migrateButton.setFont(Font.Medieval);
-        migrateButton.style.textAlign.set(TextAnchor.MiddleCenter);
-        migrateButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        migrateButton.setFontSize(16);
-        migrateButton.setSize(250, 45, false);
-        migrateButton.setBorder(2);
-        migrateButton.setBorderColor(999);
-        migrateButton.setBackgroundColor(500);
-        migrateButton.setPosition(10, 60, false);
-        migrateButton.style.borderBottomWidth.set(5);
-        migrateButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
-        migrateButton.hoverStyle.borderBottomWidth.set(5);
-        migrateButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
-        popup.addChild(migrateButton);
-
-        UILabel maxPlusButton = new UILabel();
-        maxPlusButton.setClickable(true);
-        maxPlusButton.setText("<b>+ MaxAreaAllocation</b>");
-        maxPlusButton.setFont(Font.Medieval);
-        maxPlusButton.style.textAlign.set(TextAnchor.MiddleCenter);
-        maxPlusButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        maxPlusButton.setFontSize(16);
-        maxPlusButton.setSize(250, 45, false);
-        maxPlusButton.setBorder(2);
-        maxPlusButton.setBorderColor(999);
-        maxPlusButton.setBackgroundColor(500);
-        maxPlusButton.setPosition(270, 60, false);
-        maxPlusButton.style.borderBottomWidth.set(5);
-        maxPlusButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
-        maxPlusButton.hoverStyle.borderBottomWidth.set(5);
-        maxPlusButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
-        popup.addChild(maxPlusButton);
-
-        UILabel maxMinusButton = new UILabel();
-        maxMinusButton.setClickable(true);
-        maxMinusButton.setText("<b>- MaxAreaAllocation</b>");
-        maxMinusButton.setFont(Font.Medieval);
-        maxMinusButton.style.textAlign.set(TextAnchor.MiddleCenter);
-        maxMinusButton.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        maxMinusButton.setFontSize(16);
-        maxMinusButton.setSize(250, 45, false);
-        maxMinusButton.setBorder(2);
-        maxMinusButton.setBorderColor(999);
-        maxMinusButton.setBackgroundColor(500);
-        maxMinusButton.setPosition(530, 60, false);
-        maxMinusButton.style.borderBottomWidth.set(5);
-        maxMinusButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
-        maxMinusButton.hoverStyle.borderBottomWidth.set(5);
-        maxMinusButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
-        popup.addChild(maxMinusButton);
-
-        UILabel exitButton = new UILabel();
-        exitButton.setClickable(true);
-        exitButton.setText("<b>X</b>");
-        exitButton.setFont(Font.Medieval);
-        exitButton.style.textAlign.set(TextAnchor.MiddleCenter);
+        migrateButton = createButton(popup, 10, 60, "<b>Migrate old WP Database</b>", 250, 45);
+        maxPlusButton = createButton(popup, 270, 60, "<b>+ MaxAreaAllocation</b>", 250, 45);
+        maxMinusButton = createButton(popup, 530, 60, "<b>- MaxAreaAllocation</b>", 250, 45);
+        exitButton = createButton(popup, 745, 5, "<b>X</b>", 45, 45);
         exitButton.setFontColor(1.0f, 0.0f, 0.0f, 1.0f);
         exitButton.setFontSize(18);
-        exitButton.setSize(45, 45, false);
-        exitButton.setBorder(2);
-        exitButton.setBorderColor(999);
-        exitButton.setBackgroundColor(500);
-        exitButton.setPosition(745, 5, false);
         exitButton.style.borderBottomWidth.set(2);
-        exitButton.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
         exitButton.hoverStyle.borderBottomWidth.set(2);
-        exitButton.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
-        popup.addChild(exitButton);
 
         player.setAttribute("migrateButton", migrateButton);
         player.setAttribute("maxPlusButton", maxPlusButton);
         player.setAttribute("maxMinusButton", maxMinusButton);
         player.setAttribute("adminPopupExitButton", exitButton);
     }
+
+    private UILabel createButton(UIElement parent, int x, int y, String text, int width, int height) {
+        UILabel button = new UILabel();
+        button.setClickable(true);
+        button.setText(text);
+        button.setFont(Font.Medieval);
+        button.style.textAlign.set(TextAnchor.MiddleCenter);
+        button.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        button.setFontSize(16);
+        button.setSize(width, height, false);
+        button.setBorder(2);
+        button.setBorderColor(999);
+        button.setBackgroundColor(500);
+        button.setPosition(x, y, false);
+        button.style.borderBottomWidth.set(5);
+        button.hoverStyle.backgroundColor.set(0.2f, 0.2f, 0.2f, 0.9f);
+        button.hoverStyle.borderBottomWidth.set(5);
+        button.hoverStyle.borderBottomColor.set(0.1f, 0.1f, 0.9f, 0.9f);
+        parent.addChild(button);
+        return button;
+    }
+
+    private UILabel createLabel(UIElement parent, int x, int y, String text, int width, int height, boolean clickable) {
+        UILabel label = new UILabel();
+        label.setClickable(clickable);
+        label.setText(text);
+        label.setFont(Font.Medieval);
+        label.style.textAlign.set(TextAnchor.MiddleCenter);
+        label.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        label.setFontSize(16);
+        label.setSize(width, height, false);
+        label.setBorder(2);
+        label.setBorderColor(999);
+        label.setBackgroundColor(500);
+        label.setPosition(x, y, false);
+        parent.addChild(label);
+        return label;
+    }
 }
-
-

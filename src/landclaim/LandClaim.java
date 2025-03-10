@@ -9,7 +9,6 @@ import net.risingworld.api.events.player.PlayerCommandEvent;
 import net.risingworld.api.events.player.PlayerConnectEvent;
 import net.risingworld.api.events.player.PlayerEnterChunkEvent;
 import net.risingworld.api.events.player.PlayerKeyEvent;
-import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.style.Font;
@@ -22,10 +21,9 @@ import net.risingworld.api.worldelements.Area3D;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class LandClaim extends Plugin implements Listener {
     private LandClaimDatabase database;
@@ -33,20 +31,25 @@ public class LandClaim extends Plugin implements Listener {
     public AdminUIMenu adminUIMenu;
     private AdminOnClickButtons adminClicks;
     private PlayerOnClickButtons clickHandler;
-    
+    private DatabaseTaskQueue taskQueue;
+
     public HashMap<Player, PlayerUIMenu> playerMenus = new HashMap<>();
     private HashMap<Player, PlayerTools> playerTools = new HashMap<>();
     private HashMap<Player, Vector3i> playerChunks = new HashMap<>();
-    HashMap<String, ClaimedArea> claimedAreas = new HashMap<>();
-    protected static ArrayList<Area3D> AllClaimedAreas = new ArrayList<>(); // Others' areas (blue)
-    protected static HashMap<String, ArrayList<Area3D>> UserClaimedAreas = new HashMap<>(); // Player's areas (green) by UID
-    private boolean areasLoaded = false; // Track if areas are loaded
+    HashMap<Vector3i, ClaimedArea> claimedAreasByChunk = new HashMap<>();
+    protected static ArrayList<Area3D> AllClaimedAreas = new ArrayList<>();
+    protected static HashMap<String, ArrayList<Area3D>> UserClaimedAreas = new HashMap<>();
+    private boolean areasLoaded = false;
 
     private HashMap<Player, Boolean> myAreasVisible = new HashMap<>();
     private HashMap<Player, Boolean> allAreasVisible = new HashMap<>();
 
     public HashMap<Player, PlayerTools> getPlayerTools() {
         return playerTools;
+    }
+
+    public DatabaseTaskQueue getTaskQueue() {
+        return taskQueue;
     }
 
     @Override
@@ -58,19 +61,20 @@ public class LandClaim extends Plugin implements Listener {
         adminTools = new AdminTools(this);
         adminUIMenu = new AdminUIMenu(this, adminTools);
         adminClicks = new AdminOnClickButtons(this, adminTools);
-        
+        taskQueue = new DatabaseTaskQueue(this);
+
         registerEventListener(this);
         OwnerEventHandler ownerHandler = new OwnerEventHandler(this);
         registerEventListener(ownerHandler);
-        
+
         clickHandler = new PlayerOnClickButtons(this);
         clickHandler.register();
-        
+
+        claimedAreasByChunk.clear();
         AllClaimedAreas.clear();
         UserClaimedAreas.clear();
-        claimedAreas.clear();
         areasLoaded = false;
-        System.out.println("Cleared AllClaimedAreas, UserClaimedAreas, and claimedAreas on plugin enable. Areas will load on first player connect.");
+        System.out.println("Cleared data structures on enable. Areas will load on first connect.");
     }
 
     @Override
@@ -79,49 +83,57 @@ public class LandClaim extends Plugin implements Listener {
         if (database != null) {
             database.close();
         }
+        taskQueue.shutdown();
     }
 
     @EventMethod
-    public void onPlayerConnect(PlayerConnectEvent event) throws SQLException {
+    public void onPlayerConnect(PlayerConnectEvent event) {
         Player player = event.getPlayer();
-        
         player.registerKeys(Key.L, Key.LeftShift);
-        
-        PlayerUIMenu menu = playerMenus.get(player);
-        if (menu == null) {
-            menu = new PlayerUIMenu(player, this);
-            playerMenus.put(player, menu);
-        }
-        
-        PlayerTools tools = new PlayerTools(player);
-        tools.initTools(menu);
-        playerTools.put(player, tools);
-        
+
+        PlayerUIMenu menu = playerMenus.computeIfAbsent(player, p -> new PlayerUIMenu(p, this));
+        PlayerTools tools = playerTools.computeIfAbsent(player, p -> {
+            PlayerTools t = new PlayerTools(p);
+            t.initTools(menu);
+            return t;
+        });
+
         Vector3i initialChunk = player.getChunkPosition();
         playerChunks.put(player, initialChunk);
-        System.out.println("Player " + player.getName() + " connected at chunk: " + initialChunk.x + ", " + initialChunk.y + ", " + initialChunk.z);
-        
+
         if (adminTools.isAdmin(player)) {
             adminUIMenu.showAdminMenu(player);
         }
-        
-        String uid = player.getUID();
-        int areaCount = getPlayerAreaCountFromDB(uid);
-        if (areaCount == 0) {
-            database.setMaxAreaAllocation(uid, 2);
-        }
-        
-        addAreaInfoLabel(player);
-        updateAreaInfoLabel(player, initialChunk);
-        
-        myAreasVisible.put(player, false);
-        allAreasVisible.put(player, false);
-        
-        if (!areasLoaded) {
-            loadClaimedAreas();
-            areasLoaded = true;
-        }
-        showAreasOnConnect(player);
+
+        taskQueue.queueTask(
+            () -> {
+                try {
+                    String uid = player.getUID();
+                    int areaCount = getPlayerAreaCountFromDB(uid);
+                    if (areaCount == 0) {
+                        database.setMaxAreaAllocation(uid, 2);
+                    }
+                } catch (SQLException e) {
+                    System.out.println("[LandClaim] Error setting initial allocation: " + e.getMessage());
+                }
+            },
+            () -> {
+                addAreaInfoLabel(player);
+                updateAreaInfoLabel(player, initialChunk);
+                myAreasVisible.put(player, false);
+                allAreasVisible.put(player, false);
+                if (!areasLoaded) {
+                    try {
+                        loadClaimedAreas();
+                        areasLoaded = true;
+                        System.out.println("[LandClaim] Areas loaded successfully for player " + player.getName());
+                    } catch (SQLException e) {
+                        System.out.println("[LandClaim] Failed to load areas: " + e.getMessage());
+                    }
+                }
+                showAreasOnConnect(player);
+            }
+        );
     }
 
     @EventMethod
@@ -140,13 +152,7 @@ public class LandClaim extends Plugin implements Listener {
         Player player = event.getPlayer();
         Vector3i chunk = event.getNewChunkCoordinates();
         playerChunks.put(player, chunk);
-        System.out.println("Player " + player.getName() + " entered chunk: " + chunk.x + ", " + chunk.y + ", " + chunk.z);
         updateAreaInfoLabel(player, chunk);
-    }
-
-    @EventMethod
-    public void onPlayerUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
-        adminClicks.onPlayerUIElementClick(event);
     }
 
     @EventMethod
@@ -171,238 +177,215 @@ public class LandClaim extends Plugin implements Listener {
         return database;
     }
 
-    public void startClaimMode(Player player) throws SQLException {
+    public void startClaimMode(Player player) {
         Vector3i chunk = playerChunks.get(player);
         if (chunk == null) {
-            player.sendTextMessage("Error: No chunk data available! Try moving a bit to update your position.");
-            System.out.println("No chunk data for " + player.getName() + " - playerChunks size: " + playerChunks.size());
+            player.sendTextMessage("Error: No chunk data available!");
             return;
         }
 
-        int areaX = chunk.x;
-        int areaY = chunk.y;
-        int areaZ = chunk.z;
+        taskQueue.queueTask(
+            () -> {
+                try {
+                    ClaimedArea existingArea = claimedAreasByChunk.get(chunk);
+                    if (existingArea != null) {
+                        player.setAttribute("claimResult", "This area is already claimed as " + existingArea.areaName + "!");
+                        return;
+                    }
 
-        String key = getKeyFromCoords(areaX, areaY, areaZ);
-        ClaimedArea existingArea = claimedAreas.get(key);
-        if (existingArea != null) {
-            player.sendTextMessage("This area is already claimed as " + existingArea.areaName + "!");
-            return;
-        }
+                    String uid = player.getUID();
+                    int areaCount = getPlayerAreaCountFromDB(uid);
+                    int maxAreas = database.getMaxAreaAllocation(uid);
+                    if (areaCount >= maxAreas) {
+                        player.setAttribute("claimResult", "Sorry, you cannot claim more areas. Limit: " + maxAreas + "!");
+                        return;
+                    }
 
-        String uid = player.getUID();
-        int areaCount = getPlayerAreaCountFromDB(uid);
-        int maxAreas = database.getMaxAreaAllocation(uid);
-        if (areaCount >= maxAreas) {
-            player.sendTextMessage("Sorry, you cannot claim more areas. You have reached your limit of " + maxAreas + "! Ask an admin to increase it via the admin panel.");
-            return;
-        }
-
-        String areaName = areaCount == 0 ? player.getName() + "'s Home" : player.getName() + "'s Area=" + (areaCount + 1);
-        ClaimedArea newArea = new ClaimedArea(uid, player.getName(), areaName, areaX, areaY, areaZ);
-        if (database.addClaimedArea(newArea)) {
-            claimedAreas.put(key, newArea);
-            addAreaVisual(areaX, areaY, areaZ, areaName, uid, true, player);
-            player.sendTextMessage("Area claimed successfully as " + areaName + "!");
-            updateAreaInfoLabel(player, chunk);
-            showAreas(player);
-        } else {
-            player.sendTextMessage("Failed to claim area - you may have reached your limit or an error occurred.");
-        }
+                    String areaName = areaCount == 0 ? player.getName() + "'s Home" : player.getName() + "'s Area=" + (areaCount + 1);
+                    ClaimedArea newArea = new ClaimedArea(uid, player.getName(), areaName, chunk.x, chunk.y, chunk.z);
+                    if (database.addClaimedArea(newArea)) {
+                        player.setAttribute("claimResult", newArea);
+                    } else {
+                        player.setAttribute("claimResult", "Failed to claim area!");
+                    }
+                } catch (SQLException e) {
+                    player.setAttribute("claimResult", "Error claiming area: " + e.getMessage());
+                }
+            },
+            () -> {
+                Object result = player.getAttribute("claimResult");
+                if (result instanceof ClaimedArea) {
+                    ClaimedArea newArea = (ClaimedArea) result;
+                    claimedAreasByChunk.put(chunk, newArea);
+                    addAreaVisual(chunk.x, chunk.y, chunk.z, newArea.areaName, newArea.playerUID, true, player);
+                    player.sendTextMessage("Area claimed successfully as " + newArea.areaName + "!");
+                    updateAreaInfoLabel(player, chunk);
+                    showAreas(player);
+                } else {
+                    player.sendTextMessage((String) result);
+                }
+            }
+        );
     }
 
-    public void unclaimArea(Player player) throws SQLException {
+    public void unclaimArea(Player player) {
         Vector3i chunk = playerChunks.get(player);
         if (chunk == null) {
-            player.sendYellMessage("Error: No chunk data available! Try moving to update your position.", 3, true);
+            player.sendYellMessage("Error: No chunk data available!", 3, true);
             return;
         }
 
-        int areaX = chunk.x;
-        int areaY = chunk.y;
-        int areaZ = chunk.z;
+        taskQueue.queueTask(
+            () -> {
+                try {
+                    ClaimedArea area = claimedAreasByChunk.get(chunk);
+                    if (area == null) {
+                        player.setAttribute("unclaimResult", "This area is not claimed!");
+                        return;
+                    }
+                    String playerUID = player.getUID();
+                    if (!area.playerUID.equals(playerUID)) {
+                        player.setAttribute("unclaimResult", "You can only unclaim your own areas!");
+                        return;
+                    }
 
-        String key = getKeyFromCoords(areaX, areaY, areaZ);
-        ClaimedArea area = claimedAreas.get(key);
-        if (area == null) {
-            player.sendYellMessage("This area is not claimed!", 3, true);
-            return;
-        }
-        String playerUID = player.getUID();
-        if (!area.playerUID.equals(playerUID)) {
-            player.sendYellMessage("You can only unclaim your own areas!", 3, true);
-            return;
-        }
-
-        database.removeClaimedArea(areaX, areaY, areaZ, playerUID);
-        claimedAreas.remove(key);
-        
-        removeAreaVisual(areaX, areaY, areaZ, playerUID);
-        player.sendYellMessage("Area unclaimed successfully!", 3, true);
-        updateAreaInfoLabel(player, chunk);
-        showAreas(player);
+                    database.removeClaimedArea(chunk.x, chunk.y, chunk.z, playerUID);
+                    player.setAttribute("unclaimResult", "Area unclaimed successfully!");
+                } catch (SQLException e) {
+                    player.setAttribute("unclaimResult", "Error unclaiming area: " + e.getMessage());
+                }
+            },
+            () -> {
+                String result = (String) player.getAttribute("unclaimResult");
+                if ("Area unclaimed successfully!".equals(result)) {
+                    claimedAreasByChunk.remove(chunk);
+                    removeAreaVisual(chunk.x, chunk.y, chunk.z, player.getUID());
+                    player.sendYellMessage(result, 3, true);
+                    updateAreaInfoLabel(player, chunk);
+                    showAreas(player);
+                } else {
+                    player.sendYellMessage(result, 3, true);
+                }
+            }
+        );
     }
 
     public void loadClaimedAreas() throws SQLException {
+        System.out.println("[LandClaim] Loading claimed areas from database...");
         ResultSet rs = database.getAllClaimedAreas();
-        HashSet<String> loadedChunks = new HashSet<>();
+        if (rs == null) {
+            System.out.println("[LandClaim] Error: ResultSet is null from getAllClaimedAreas()");
+            throw new SQLException("ResultSet is null");
+        }
+
+        claimedAreasByChunk.clear();
         while (rs.next()) {
-            String playerUID = rs.getString("PlayerUID");
-            String areaOwnerName = rs.getString("AreaOwnerName");
-            String areaName = rs.getString("AreaName");
-            int areaX = rs.getInt("AreaX");
-            int areaY = rs.getInt("AreaY");
-            int areaZ = rs.getInt("AreaZ");
-            String key = getKeyFromCoords(areaX, areaY, areaZ);
-            if (!loadedChunks.contains(key)) {
-                System.out.println("Loading area: UID=" + playerUID + ", Name=" + areaName + ", Chunk=(" + areaX + "," + areaY + "," + areaZ + ")");
-                ClaimedArea area = new ClaimedArea(playerUID, areaOwnerName, areaName, areaX, areaY, areaZ);
-                claimedAreas.put(key, area);
-                loadedChunks.add(key);
-            } else {
-                System.out.println("Skipping duplicate area for chunk (" + areaX + "," + areaY + "," + areaZ + "), keeping existing entry");
+            try {
+                String playerUID = rs.getString("PlayerUID");
+                String areaOwnerName = rs.getString("AreaOwnerName");
+                String areaName = rs.getString("AreaName");
+                int areaX = rs.getInt("AreaX");
+                int areaY = rs.getInt("AreaY");
+                int areaZ = rs.getInt("AreaZ");
+                Vector3i chunk = new Vector3i(areaX, areaY, areaZ);
+                claimedAreasByChunk.put(chunk, new ClaimedArea(playerUID, areaOwnerName, areaName, areaX, areaY, areaZ));
+                System.out.println("[LandClaim] Loaded area: " + areaName + " at " + areaX + "," + areaY + "," + areaZ);
+            } catch (SQLException e) {
+                System.out.println("[LandClaim] Error reading row: " + e.getMessage());
+                throw e; // Re-throw to be caught by the caller
             }
         }
-        System.out.println("Loaded " + claimedAreas.size() + " unique claimed areas from database.");
+        System.out.println("[LandClaim] Loaded " + claimedAreasByChunk.size() + " claimed areas.");
+        rs.close(); // Ensure ResultSet is closed
     }
 
     private void addAreaVisual(int areaX, int areaY, int areaZ, String areaName, String playerUID, boolean isPlayerClaimed, Player player) {
-        Vector3i startChunk = new Vector3i(areaX, areaY, areaZ);
-        Vector3i endChunk = new Vector3i(areaX, areaY, areaZ);
-        Vector3i startBlock = new Vector3i(0, 0, 0);
-        Vector3i endBlock = new Vector3i(32, 64, 32);
-
-        Vector3f startPos = getGlobalPosition(startChunk, startBlock);
-        Vector3f endPos = getGlobalPosition(endChunk, endBlock);
+        Vector3i chunk = new Vector3i(areaX, areaY, areaZ);
+        Vector3f startPos = getGlobalPosition(chunk, new Vector3i(0, 0, 0));
+        Vector3f endPos = getGlobalPosition(chunk, new Vector3i(32, 64, 32));
         Area area = new Area(startPos, endPos);
         Area3D areaVisual = new Area3D(area);
         areaVisual.setAlwaysVisible(false);
         areaVisual.setFrameVisible(true);
 
         if (isPlayerClaimed) {
-            areaVisual.setColor(0.0f, 0.2f, 0.0f, 0.3f); // Green fill
-            areaVisual.setFrameColor(0.0f, 0.5f, 0.0f, 1.0f); // Brighter green frame
+            areaVisual.setColor(0.0f, 0.2f, 0.0f, 0.3f);
+            areaVisual.setFrameColor(0.0f, 0.5f, 0.0f, 1.0f);
             UserClaimedAreas.computeIfAbsent(playerUID, k -> new ArrayList<>()).add(areaVisual);
         } else {
-            areaVisual.setColor(0.0f, 0.0f, 1.0f, 0.3f); // Blue fill
-            areaVisual.setFrameColor(0.0f, 0.0f, 1.0f, 1.0f); // Blue frame
+            areaVisual.setColor(0.0f, 0.0f, 1.0f, 0.3f);
+            areaVisual.setFrameColor(0.0f, 0.0f, 1.0f, 1.0f);
             AllClaimedAreas.add(areaVisual);
         }
 
-        if (player != null) {
-            player.addGameObject(areaVisual);
-        }
+        player.addGameObject(areaVisual);
     }
 
     private void removeAreaVisual(int areaX, int areaY, int areaZ, String playerUID) {
-        String key = getKeyFromCoords(areaX, areaY, areaZ);
-        ClaimedArea area = claimedAreas.get(key);
-        if (area != null) {
-            ArrayList<Area3D> userAreas = UserClaimedAreas.get(playerUID);
-            if (userAreas != null) {
-                userAreas.removeIf(visual -> {
-                    Vector3f start = visual.getArea().getStartPosition();
-                    Vector3i chunk = getChunkPosition(start);
-                    return chunk.x == areaX && chunk.y == areaY && chunk.z == areaZ;
-                });
-            }
+        Vector3i chunk = new Vector3i(areaX, areaY, areaZ);
+        ArrayList<Area3D> userAreas = UserClaimedAreas.get(playerUID);
+        if (userAreas != null) {
+            userAreas.removeIf(visual -> getChunkPosition(visual.getArea().getStartPosition()).equals(chunk));
         }
     }
 
-    private void showAreasOnConnect(Player player) throws SQLException {
-        System.out.println("[LandClaim] showAreasOnConnect called for " + player.getName() + " at " + System.currentTimeMillis());
+    public void showAreasOnConnect(Player player) {
+        Vector3i playerChunk = player.getChunkPosition();
+        int radius = 5;
         String playerUID = player.getUID();
 
-        try (ResultSet result = database.getDb().executeQuery("SELECT * FROM `Areas` WHERE `PlayerUID` = '" + escapeSql(playerUID) + "'")) {
-            while (result.next()) {
-                int areaX = result.getInt("AreaX");
-                int areaY = result.getInt("AreaY");
-                int areaZ = result.getInt("AreaZ");
-                String areaName = result.getString("AreaName");
-
-                Vector3i startBlock = new Vector3i(0, 0, 0);
-                Vector3i endBlock = new Vector3i(32, 64, 32);
-                Vector3i startChunk = new Vector3i(areaX, areaY, areaZ);
-                Vector3i endChunk = new Vector3i(areaX, areaY, areaZ);
-                Vector3f startPos = getGlobalPosition(startChunk, startBlock);
-                Vector3f endPos = getGlobalPosition(endChunk, endBlock);
-                Area area = new Area(startPos, endPos);
-                Area3D setArea = new Area3D(area);
-                setArea.setAlwaysVisible(false);
-                setArea.setFrameVisible(true);
-                setArea.setColor(0.0f, 0.2f, 0.0f, 0.3f); // Green fill
-                setArea.setFrameColor(0.0f, 0.5f, 0.0f, 1.0f); // Brighter green frame
-                
-                UserClaimedAreas.computeIfAbsent(playerUID, k -> new ArrayList<>()).add(setArea);
-                player.addGameObject(setArea);
-                Timer hideTimer = new Timer(60.0f, 0.0f, 0, null);
-                hideTimer.setTask(() -> player.removeGameObject(setArea));
-                hideTimer.start();
+        for (ClaimedArea area : claimedAreasByChunk.values()) {
+            Vector3i areaChunk = new Vector3i(area.areaX, area.areaY, area.areaZ);
+            if (Math.abs(areaChunk.x - playerChunk.x) <= radius &&
+                Math.abs(areaChunk.y - playerChunk.y) <= radius &&
+                Math.abs(areaChunk.z - playerChunk.z) <= radius) {
+                addAreaVisual(area.areaX, area.areaY, area.areaZ, area.areaName, area.playerUID,
+                    area.playerUID.equals(playerUID), player);
+                if (area.playerUID.equals(playerUID)) {
+                    // Green areas (your claims) vanish after 60 seconds
+                    new Timer(60.0f, 0f, 0, () -> {
+                        ArrayList<Area3D> userAreas = UserClaimedAreas.getOrDefault(playerUID, new ArrayList<>());
+                        Area3D areaVisual = userAreas.stream()
+                            .filter(a -> getChunkPosition(a.getArea().getStartPosition()).equals(areaChunk))
+                            .findFirst().orElse(null);
+                        if (areaVisual != null) {
+                            player.removeGameObject(areaVisual);
+                        }
+                    }).start();
+                } else {
+                    // Blue areas (others' claims) vanish after 60 seconds
+                    Area3D areaVisual = AllClaimedAreas.stream()
+                        .filter(a -> getChunkPosition(a.getArea().getStartPosition()).equals(areaChunk))
+                        .findFirst().orElse(null);
+                    if (areaVisual != null) {
+                        new Timer(60.0f, 0f, 0, () -> {
+                            player.removeGameObject(areaVisual);
+                        }).start();
+                    }
+                }
             }
-        } catch (SQLException ex) {
-            Logger.getLogger(LandClaim.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
-        try (ResultSet result = database.getDb().executeQuery("SELECT * FROM `Areas` WHERE `PlayerUID` != '" + escapeSql(playerUID) + "'")) {
-            while (result.next()) {
-                int areaX = result.getInt("AreaX");
-                int areaY = result.getInt("AreaY");
-                int areaZ = result.getInt("AreaZ");
-                String areaName = result.getString("AreaName");
-
-                Vector3i startBlock = new Vector3i(0, 0, 0);
-                Vector3i endBlock = new Vector3i(32, 64, 32);
-                Vector3i startChunk = new Vector3i(areaX, areaY, areaZ);
-                Vector3i endChunk = new Vector3i(areaX, areaY, areaZ);
-                Vector3f startPos = getGlobalPosition(startChunk, startBlock);
-                Vector3f endPos = getGlobalPosition(endChunk, endBlock);
-                Area area = new Area(startPos, endPos);
-                Area3D setArea = new Area3D(area);
-                setArea.setAlwaysVisible(false);
-                setArea.setFrameVisible(true);
-                setArea.setColor(0.0f, 0.0f, 1.0f, 0.3f); // Blue fill
-                setArea.setFrameColor(0.0f, 0.0f, 1.0f, 1.0f); // Blue frame
-                
-                AllClaimedAreas.add(setArea);
-                player.addGameObject(setArea);
-                Timer hideTimer = new Timer(60.0f, 0.0f, 0, null);
-                hideTimer.setTask(() -> player.removeGameObject(setArea));
-                hideTimer.start();
-            }
-        } catch (SQLException ex) {
-            Logger.getLogger(LandClaim.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
     public void showAreas(Player player) {
-        System.out.println("[LandClaim] showAreas called for " + player.getName() + " at " + System.currentTimeMillis());
         hideAreas(player);
         String playerUID = player.getUID();
         ArrayList<Area3D> userAreas = UserClaimedAreas.get(playerUID);
         if (userAreas != null) {
-            for (Area3D area : userAreas) {
-                player.addGameObject(area);
-            }
+            userAreas.forEach(player::addGameObject);
         }
-        for (Area3D area : AllClaimedAreas) {
-            player.addGameObject(area);
-        }
+        AllClaimedAreas.forEach(player::addGameObject);
         myAreasVisible.put(player, true);
         allAreasVisible.put(player, true);
     }
 
     private void hideAreas(Player player) {
-        System.out.println("[LandClaim] hideAreas called for " + player.getName() + " at " + System.currentTimeMillis());
         String playerUID = player.getUID();
         ArrayList<Area3D> userAreas = UserClaimedAreas.get(playerUID);
         if (userAreas != null) {
-            for (Area3D area : userAreas) {
-                player.removeGameObject(area);
-            }
+            userAreas.forEach(player::removeGameObject);
         }
-        for (Area3D area : AllClaimedAreas) {
-            player.removeGameObject(area);
-        }
+        AllClaimedAreas.forEach(player::removeGameObject);
         myAreasVisible.put(player, false);
         allAreasVisible.put(player, false);
     }
@@ -416,16 +399,10 @@ public class LandClaim extends Plugin implements Listener {
         if (userAreas == null) return;
 
         if (visible) {
-            System.out.println("[LandClaim] showMyAreas called for " + player.getName());
-            for (Area3D area : userAreas) {
-                player.addGameObject(area);
-            }
+            userAreas.forEach(player::addGameObject);
             myAreasVisible.put(player, true);
         } else {
-            System.out.println("[LandClaim] hideMyAreas called for " + player.getName());
-            for (Area3D area : userAreas) {
-                player.removeGameObject(area);
-            }
+            userAreas.forEach(player::removeGameObject);
             myAreasVisible.put(player, false);
         }
     }
@@ -438,25 +415,15 @@ public class LandClaim extends Plugin implements Listener {
         ArrayList<Area3D> userAreas = UserClaimedAreas.get(playerUID);
 
         if (visible) {
-            System.out.println("[LandClaim] showAllAreas called for " + player.getName());
-            for (Area3D area : AllClaimedAreas) {
-                player.addGameObject(area);
-            }
+            AllClaimedAreas.forEach(player::addGameObject);
             if (userAreas != null) {
-                for (Area3D area : userAreas) {
-                    player.addGameObject(area);
-                }
+                userAreas.forEach(player::addGameObject);
             }
             allAreasVisible.put(player, true);
         } else {
-            System.out.println("[LandClaim] hideAllAreas called for " + player.getName());
-            for (Area3D area : AllClaimedAreas) {
-                player.removeGameObject(area);
-            }
+            AllClaimedAreas.forEach(player::removeGameObject);
             if (userAreas != null) {
-                for (Area3D area : userAreas) {
-                    player.removeGameObject(area);
-                }
+                userAreas.forEach(player::removeGameObject);
             }
             allAreasVisible.put(player, false);
         }
@@ -468,8 +435,7 @@ public class LandClaim extends Plugin implements Listener {
     }
 
     private String escapeSql(String input) {
-        if (input == null) return "";
-        return input.replace("'", "''");
+        return input == null ? "" : input.replace("'", "''");
     }
 
     private void addAreaInfoLabel(Player player) {
@@ -491,81 +457,68 @@ public class LandClaim extends Plugin implements Listener {
 
     private void updateAreaInfoLabel(Player player, Vector3i chunk) {
         UILabel areaLabel = (UILabel) player.getAttribute("areaInfoLabel");
-        if (areaLabel == null) return;
-
-        int areaX = chunk.x;
-        int areaY = chunk.y;
-        int areaZ = chunk.z;
-
-        ClaimedArea area = claimedAreas.get(getKeyFromCoords(areaX, areaY, areaZ));
-        areaLabel.setText(area != null ? area.areaName : "Area Unclaimed");
-    }
-
-    String getKeyFromCoords(int x, int y, int z) {
-        return x + "," + y + "," + z;
+        if (areaLabel != null) {
+            ClaimedArea area = claimedAreasByChunk.get(chunk);
+            areaLabel.setText(area != null ? area.areaName : "Area Unclaimed");
+        }
     }
 
     public String getAreaOwnerUIDFromPosition(Player player) throws SQLException {
         Vector3i chunk = player.getChunkPosition();
-        int areaX = chunk.x;
-        int areaY = chunk.y;
-        int areaZ = chunk.z;
-
         ResultSet rs = database.getDb().executeQuery(
-            "SELECT PlayerUID FROM `Areas` WHERE AreaX = " + areaX + " AND AreaY = " + areaY + " AND AreaZ = " + areaZ
+            "SELECT PlayerUID FROM `Areas` WHERE AreaX = " + chunk.x + " AND AreaY = " + chunk.y + " AND AreaZ = " + chunk.z
         );
         return rs.next() ? rs.getString("PlayerUID") : null;
     }
 
     public ClaimedArea getClaimedAreaAt(Vector3i chunkPos) {
-        String key = getKeyFromCoords(chunkPos.x, chunkPos.y, chunkPos.z);
-        Logger.getLogger(LandClaim.class.getName()).info("Looking up claim with key: " + key + " at chunk (" + chunkPos.x + ", " + chunkPos.y + ", " + chunkPos.z + ")");
-        ClaimedArea claim = claimedAreas.get(key);
-        if (claim != null) {
-            Logger.getLogger(LandClaim.class.getName()).info("Found claim at chunk (" + claim.areaX + ", " + claim.areaY + ", " + claim.areaZ + ")");
-        } else {
-            Logger.getLogger(LandClaim.class.getName()).info("No claim found at this chunk.");
-        }
-        return claim;
+        return claimedAreasByChunk.get(chunkPos);
     }
 
     private Vector3f getGlobalPosition(Vector3i chunk, Vector3i block) {
-        return new Vector3f(
-            chunk.x * 32 + block.x,
-            chunk.y * 64 + block.y,
-            chunk.z * 32 + block.z
-        );
+        return new Vector3f(chunk.x * 32 + block.x, chunk.y * 64 + block.y, chunk.z * 32 + block.z);
     }
 
     Vector3i getChunkPosition(Vector3f position) {
-        return new Vector3i(
-            (int) (position.x / 32),
-            (int) (position.y / 64),
-            (int) (position.z / 32)
-        );
-    }
-
-    private boolean isAreaVisualForClaimedArea(Area3D areaVisual, ClaimedArea claimedArea) {
-        Vector3f start = areaVisual.getArea().getStartPosition();
-        Vector3i startChunk = getChunkPosition(start);
-        return startChunk.x == claimedArea.areaX && startChunk.y == claimedArea.areaY && startChunk.z == claimedArea.areaZ;
+        return new Vector3i((int) (position.x / 32), (int) (position.y / 64), (int) (position.z / 32));
     }
 
     class ClaimedArea {
         String playerUID;
         String areaOwnerName;
         String areaName;
-        int areaX;
-        int areaY;
-        int areaZ;
+        int areaX, areaY, areaZ;
 
-        ClaimedArea(String playerUID, String areaOwnerName, String areaName, int areaX, int areaY, int z) {
+        ClaimedArea(String playerUID, String areaOwnerName, String areaName, int areaX, int areaY, int areaZ) {
             this.playerUID = playerUID;
             this.areaOwnerName = areaOwnerName;
             this.areaName = areaName;
             this.areaX = areaX;
             this.areaY = areaY;
-            this.areaZ = z;
+            this.areaZ = areaZ;
+        }
+    }
+
+    class DatabaseTaskQueue {
+        private final ExecutorService executor = Executors.newFixedThreadPool(2);
+        private final LandClaim plugin;
+
+        DatabaseTaskQueue(LandClaim plugin) {
+            this.plugin = plugin;
+        }
+
+        public void queueTask(Runnable task, Runnable callback) {
+            executor.submit(() -> {
+                try {
+                    task.run();
+                } finally {
+                    new Timer(0f, 0f, 0, callback).start();
+                }
+            });
+        }
+
+        public void shutdown() {
+            executor.shutdown();
         }
     }
 }
