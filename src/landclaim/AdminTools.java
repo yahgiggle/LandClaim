@@ -3,7 +3,6 @@ package landclaim;
 import net.risingworld.api.Server;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UILabel;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -11,8 +10,8 @@ import java.util.Map;
 
 public class AdminTools {
     private final LandClaim plugin;
-    private volatile boolean isMigrating = false; // Thread-safe flag
-    private volatile String lastMigrationResult = "Migration queued..."; // Track result for callback
+    private volatile boolean isMigrating = false;
+    private volatile String lastMigrationResult = "Migration queued...";
 
     public AdminTools(LandClaim plugin) {
         this.plugin = plugin;
@@ -23,85 +22,62 @@ public class AdminTools {
     }
 
     public String migrateDatabase(Player player) {
-        if (!isAdmin(player)) {
-            return "Migration failed: Only admins can perform database migration!";
-        }
-        if (isMigrating) {
-            return "Migration already in progress, please wait...";
-        }
+        if (!isAdmin(player)) return "Only admins can migrate!";
+        if (isMigrating) return "Migration in progress...";
 
-        UILabel feedbackPanel = (UILabel) player.getAttribute("FeedBackinfoPanel");
-        if (feedbackPanel != null) {
-            feedbackPanel.setText("Migration started...");
-        }
+        UILabel feedback = (UILabel) player.getAttribute("FeedBackinfoPanel");
+        if (feedback != null) feedback.setText("Migration started...");
 
         plugin.getTaskQueue().queueTask(
             () -> {
+                isMigrating = true;
                 try {
-                    isMigrating = true;
-                    System.out.println("[LandClaim] Starting migration from WorldProtection...");
                     LandClaimDatabase db = plugin.getDatabase();
                     if (db == null) {
-                        lastMigrationResult = "Migration failed: Database not initialized.";
+                        lastMigrationResult = "Database not initialized!";
                         return;
                     }
-
                     db.migrateAreasFromWorldProtection(player);
 
-                    // Count areas per player
-                    Map<String, Integer> playerAreaCounts = new HashMap<>();
-                    String countQuery = "SELECT PlayerUID, COUNT(*) as areaCount FROM `Areas` GROUP BY PlayerUID";
-                    System.out.println("[LandClaim] Executing count query: " + countQuery);
-                    ResultSet rs = db.getDb().executeQuery(countQuery);
-                    while (rs.next()) {
-                        playerAreaCounts.put(rs.getString("PlayerUID"), rs.getInt("areaCount"));
-                    }
-                    rs.close();
+                    Map<String, Integer> counts = new HashMap<>();
+                    ResultSet rs = db.getDb().executeQuery("SELECT PlayerUID, COUNT(*) as count FROM `Areas` GROUP BY PlayerUID");
+                    while (rs.next()) counts.put(rs.getString("PlayerUID"), rs.getInt("count"));
 
-                    // Update PlayerAreaStats
-                    for (Map.Entry<String, Integer> entry : playerAreaCounts.entrySet()) {
-                        String playerUID = entry.getKey();
-                        int currentAreas = entry.getValue();
-                        int newMaxAreas = currentAreas + 2;
+                    for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                        String uid = entry.getKey();
+                        int count = entry.getValue();
+                        int max = count + 2;
+                        String sql = db.getDb().executeQuery("SELECT PlayerUID FROM `PlayerAreaStats` WHERE PlayerUID = '" + uid + "'").next() ?
+                            "UPDATE `PlayerAreaStats` SET AreaCount = " + count + ", MaxAreaAllocation = " + max + " WHERE PlayerUID = '" + uid + "'" :
+                            "INSERT INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) VALUES ('" + uid + "', " + count + ", " + max + ")";
+                        db.getDb().executeUpdate(sql);
 
-                        String checkQuery = "SELECT PlayerUID FROM `PlayerAreaStats` WHERE PlayerUID = '" + playerUID + "'";
-                        ResultSet checkRs = db.getDb().executeQuery(checkQuery);
-                        String updateQuery = checkRs.next() ?
-                            "UPDATE `PlayerAreaStats` SET AreaCount = " + currentAreas + ", MaxAreaAllocation = " + newMaxAreas + " WHERE PlayerUID = '" + playerUID + "'" :
-                            "INSERT INTO `PlayerAreaStats` (PlayerUID, AreaCount, MaxAreaAllocation) VALUES ('" + playerUID + "', " + currentAreas + ", " + newMaxAreas + ")";
-                        checkRs.close();
-                        db.getDb().executeUpdate(updateQuery);
-
-                        Player owner = Server.getPlayerByUID(playerUID); // Use Server static method
-                        if (owner != null) {
-                            owner.sendTextMessage("Your area limit has been updated to " + newMaxAreas + " areas due to migration.");
+                        Player[] allPlayers = Server.getAllPlayers();
+                        for (Player owner : allPlayers) {
+                            if (owner.getUID().equals(uid)) {
+                                owner.sendTextMessage("Area limit updated to " + max + " due to migration.");
+                                break;
+                            }
                         }
                     }
-
                     lastMigrationResult = "Migration successful!";
                 } catch (SQLException e) {
                     lastMigrationResult = "Migration failed: " + e.getMessage();
                     System.out.println("[LandClaim] Migration error: " + e.getMessage());
-                    e.printStackTrace();
                 } finally {
                     isMigrating = false;
                 }
             },
             () -> {
-                // Reload areas on main thread
                 plugin.claimedAreasByChunk.clear();
                 try {
                     plugin.loadClaimedAreas();
                 } catch (SQLException e) {
-                    System.out.println("[LandClaim] Reload error: " + e.getMessage());
                     lastMigrationResult = "Migration completed with errors: " + e.getMessage();
                 }
-                if (feedbackPanel != null) {
-                    feedbackPanel.setText(lastMigrationResult);
-                }
+                if (feedback != null) feedback.setText(lastMigrationResult);
             }
         );
-
         return "Migration queued...";
     }
 

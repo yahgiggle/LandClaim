@@ -1,112 +1,87 @@
 package landclaim;
 
-import java.sql.SQLException;
 import net.risingworld.api.events.EventMethod;
 import net.risingworld.api.events.Listener;
 import net.risingworld.api.events.player.ui.PlayerUIElementClickEvent;
 import net.risingworld.api.objects.Player;
-import net.risingworld.api.ui.UIElement;
 import net.risingworld.api.ui.UILabel;
 
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
 public class PlayerOnClickButtons implements Listener {
     private final LandClaim plugin;
-    private boolean isRegistered = false;
     private final Map<Player, Map<UILabel, Long>> lastClickTimes = new HashMap<>();
-    private static final long CLICK_COOLDOWN_MS = 300;
 
     public PlayerOnClickButtons(LandClaim plugin) {
         this.plugin = plugin;
     }
 
     @EventMethod
-    public void onUIElementClick(PlayerUIElementClickEvent event) throws SQLException {
+    public void onPlayerUIElementClick(PlayerUIElementClickEvent event) {
         Player player = event.getPlayer();
-        UIElement element = event.getUIElement();
-        if (!(element instanceof UILabel)) return;
-
-        UILabel clickedElement = (UILabel) element;
-        long currentTime = System.currentTimeMillis();
-        Map<UILabel, Long> playerClickTimes = lastClickTimes.computeIfAbsent(player, k -> new HashMap<>());
-        long lastClickTime = playerClickTimes.getOrDefault(clickedElement, 0L);
-
-        if (currentTime - lastClickTime < CLICK_COOLDOWN_MS) {
-            System.out.println("[PlayerOnClickButtons] Ignored rapid click for " + player.getName() + " on " + clickedElement.getText());
+        UILabel element = (UILabel) event.getUIElement();
+        if (element == null) {
+            System.out.println("[PlayerOnClickButtons] Element is null for " + player.getName());
             return;
         }
-        playerClickTimes.put(clickedElement, currentTime);
+
+        long now = System.currentTimeMillis();
+        Map<UILabel, Long> clicks = lastClickTimes.computeIfAbsent(player, k -> new HashMap<>());
+        if (now - clicks.getOrDefault(element, 0L) < 300) return;
+        clicks.put(element, now);
 
         PlayerUIMenu menu = plugin.playerMenus.get(player);
         PlayerTools tools = plugin.getPlayerTools().get(player);
-        if (tools == null || menu == null) return;
+        if (menu == null || tools == null) {
+            System.out.println("[PlayerOnClickButtons] Menu or Tools null for " + player.getName());
+            return;
+        }
 
-        System.out.println("[PlayerOnClickButtons] Processing click for " + player.getName() + " on " + clickedElement.getText());
+        System.out.println("[PlayerOnClickButtons] Clicked element: " + element.getText() + " for " + player.getName());
 
-        if (clickedElement == tools.getClaimButton()) {
+        if (element == tools.getClaimButton()) {
             player.sendTextMessage("Claiming area...");
             plugin.startClaimMode(player);
-        } else if (clickedElement == tools.getUnclaimButton()) {
+        } else if (element == tools.getUnclaimButton()) {
             player.sendTextMessage("Unclaiming area...");
             plugin.unclaimArea(player);
-        } else if (clickedElement == tools.getExitButton()) {
+        } else if (element == tools.getExitButton()) {
             menu.closeMenu();
-        } else {
-            handleMenuButtons(player, menu, clickedElement);
-        }
-    }
-
-    private void handleMenuButtons(Player player, PlayerUIMenu menu, UILabel clickedElement) {
-        if (clickedElement == menu.getShowMyAreasLabel()) {
-            menu.toggleMyAreas();
-            player.sendTextMessage("Toggled My Areas visibility.");
-        } else if (clickedElement == menu.getShowAllAreasLabel()) {
-            menu.toggleAllAreas();
-            player.sendTextMessage("Toggled All Areas visibility.");
-        } else if (clickedElement == menu.getSettingsButton()) {
+        } else if (element == menu.getSettingsButton()) {
             try {
                 menu.showSettingsMenu();
-            } catch (Exception e) {
+            } catch (SQLException e) {
                 player.sendTextMessage("Error opening settings: " + e.getMessage());
             }
-        } else if (clickedElement == menu.getSettingsExitButton()) {
+        } else if (element == menu.getSettingsExitButton()) {
+            System.out.println("[PlayerOnClickButtons] Settings exit clicked for " + player.getName());
             menu.closeSettingsMenu();
-        } else if (clickedElement == player.getAttribute("nextPlayerButton")) {
+        } else if (element == menu.getShowMyAreasLabel()) {
+            menu.toggleMyAreas();
+        } else if (element == menu.getShowAllAreasLabel()) {
+            menu.toggleAllAreas();
+        } else if (element == player.getAttribute("nextPlayerButton")) {
             menu.nextPlayer();
-        } else if (clickedElement == player.getAttribute("backPlayerButton")) {
+        } else if (element == player.getAttribute("backPlayerButton")) {
             menu.backPlayer();
-        } else if (clickedElement == player.getAttribute("addGuestButton")) {
-            try {
-                menu.addGuest();
-            } catch (Exception e) {
-                player.sendTextMessage("Error adding guest: " + e.getMessage());
-            }
-        } else if (clickedElement == player.getAttribute("removeGuestButton")) {
-            try {
-                menu.removeGuest();
-            } catch (Exception e) {
-                player.sendTextMessage("Error removing guest: " + e.getMessage());
-            }
+        } else if (element == player.getAttribute("addGuestButton")) {
+            menu.addGuest();
+        } else if (element == player.getAttribute("removeGuestButton")) {
+            menu.removeGuest();
         } else {
-            menu.permissionButtons.entrySet().stream()
-                .filter(entry -> clickedElement == entry.getValue())
-                .findFirst()
-                .ifPresent(entry -> {
-                    try {
-                        menu.togglePermission(entry.getKey());
-                    } catch (Exception e) {
-                        player.sendTextMessage("Error toggling permission: " + e.getMessage());
-                    }
-                });
+            for (Map.Entry<String, UILabel> entry : menu.permissionButtons.entrySet()) {
+                if (element == entry.getValue()) {
+                    menu.togglePermission(entry.getKey());
+                    break;
+                }
+            }
+            System.out.println("[PlayerOnClickButtons] Unhandled element: " + element.getText());
         }
     }
 
     public void register() {
-        if (!isRegistered) {
-            plugin.registerEventListener(this);
-            isRegistered = true;
-            System.out.println("[PlayerOnClickButtons] Registered listener.");
-        }
+        plugin.registerEventListener(this);
     }
 }
