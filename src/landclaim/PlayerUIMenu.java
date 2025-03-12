@@ -4,6 +4,7 @@ import net.risingworld.api.Server;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UIElement;
 import net.risingworld.api.ui.UILabel;
+import net.risingworld.api.ui.UITextField;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
 import net.risingworld.api.utils.Vector3i;
@@ -20,16 +21,17 @@ import java.util.Map;
 public class PlayerUIMenu {
     private final Player player;
     private final LandClaim plugin;
-    private UIElement menuBase, settingsMenu;
+    private UIElement menuBase, settingsMenu, renameMenu;
     private UILabel claimButton, removeButton, exitButton, settingsButton, settingsExitButton;
     private UILabel showMyAreasLabel, showAllAreasLabel, infoLabel;
-    private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton;
-    private UILabel buyAreaButton;
+    private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton, changeAreaNameButton;
+    private UILabel buyAreaButton, renameButton, cancelRenameButton; // Added cancelRenameButton
     private boolean isVisible, showingMyAreas = false, showingAllAreas = true;
     private List<Player> worldPlayers = new ArrayList<>();
     private int currentPlayerIndex = -1, currentAreaId = -1;
     final Map<String, UILabel> permissionButtons = new HashMap<>();
     private Map<Vector3i, LandClaim.ClaimedArea> visibleAreas = new HashMap<>();
+    private UITextField renameTextField;
 
     public PlayerUIMenu(Player player, LandClaim plugin) {
         this.player = player;
@@ -49,7 +51,7 @@ public class PlayerUIMenu {
         menuBase.setBorderEdgeRadius(5.0f, false);
         menuBase.setBorder(3);
         menuBase.setBorderColor(888);
-        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f); // Fixed as per your correction
+        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f);
         menuBase.setVisible(false);
 
         claimButton = createButton(menuBase, 10, 10, "Claim Area", 250, 45);
@@ -82,6 +84,7 @@ public class PlayerUIMenu {
         backPlayerButton = createButton(settingsMenu, 320, 60, "Back Player", 300, 45);
         addGuestButton = createButton(settingsMenu, 630, 60, "Add Guest", 300, 45);
         removeGuestButton = createButton(settingsMenu, 940, 60, "Remove Guest", 300, 45);
+        changeAreaNameButton = createButton(settingsMenu, 1250, 60, "Change Area Name", 300, 45);
         settingsExitButton = createButton(settingsMenu, 1511, 5, "<color=red><b>X</b></color>", 45, 45); 
         player.setAttribute("settingsExitButton", settingsExitButton);
 
@@ -89,6 +92,7 @@ public class PlayerUIMenu {
         player.setAttribute("backPlayerButton", backPlayerButton);
         player.setAttribute("addGuestButton", addGuestButton);
         player.setAttribute("removeGuestButton", removeGuestButton);
+        player.setAttribute("changeAreaNameButton", changeAreaNameButton);
 
         initPermissionButtons();
     }
@@ -156,6 +160,21 @@ public class PlayerUIMenu {
         label.setPosition(x, y, false);
         parent.addChild(label);
         return label;
+    }
+
+    private UITextField createTextField(UIElement parent, int x, int y, String text, int width, int height) {
+        UITextField textField = new UITextField(text);
+        textField.style.textAlign.set(TextAnchor.MiddleCenter);
+        textField.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        textField.setFontSize(16);
+        textField.setSize(width, height, false);
+        textField.setBorder(2);
+        textField.setBorderColor(999);
+        textField.setBackgroundColor(500);
+        textField.setPosition(x, y, false);
+        textField.setMaxCharacters(50);
+        parent.addChild(textField);
+        return textField;
     }
 
     private String getBuyAreaButtonText() {
@@ -374,7 +393,6 @@ public class PlayerUIMenu {
                                      area.playerUID.equals(uid), player));
         }
 
-        // Updated to use the getter
         List<LandClaim.TempClaim> tempClaims = plugin.getTempClaims(player);
         if (tempClaims != null) {
             long now = System.currentTimeMillis();
@@ -471,6 +489,85 @@ public class PlayerUIMenu {
         return true;
     }
 
+    public void changeAreaName() {
+        Vector3i chunk = player.getChunkPosition();
+        LandClaim.ClaimedArea area = plugin.getClaimedAreaAt(chunk);
+        if (area == null) {
+            plugin.showMessage(player, "Area not claimed!", 5.0f);
+            return;
+        }
+        if (!area.playerUID.equals(player.getUID())) {
+            plugin.showMessage(player, "Only edit your own areas!", 5.0f);
+            return;
+        }
+
+        if (renameMenu == null) {
+            renameMenu = new UIElement();
+            player.addUIElement(renameMenu);
+            renameMenu.setSize(400, 150, false);
+            renameMenu.setClickable(false);
+            renameMenu.setPosition(50, 50, true);
+            renameMenu.setBorderEdgeRadius(5.0f, false);
+            renameMenu.setBorder(3);
+            renameMenu.setBorderColor(888);
+            renameMenu.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f);
+            renameMenu.setVisible(false);
+
+            renameTextField = createTextField(renameMenu, 50, 30, area.areaName, 300, 40);
+            renameButton = createButton(renameMenu, 90, 90, "Rename", 100, 45);
+            player.setAttribute("renameButton", renameButton);
+            cancelRenameButton = createButton(renameMenu, 210, 90, "Cancel", 100, 45);
+            player.setAttribute("cancelRenameButton", cancelRenameButton);
+        } else {
+            renameTextField.setText(area.areaName);
+        }
+        System.out.println("[PlayerUIMenu] Opening rename menu for " + player.getName());
+        renameMenu.setVisible(true);
+        player.setMouseCursorVisible(true);
+    }
+
+    public void cancelRename() {
+        System.out.println("[PlayerUIMenu] Canceling rename for " + player.getName());
+        renameMenu.setVisible(false);
+        player.setMouseCursorVisible(true);
+    }
+
+    public void performRename() {
+    plugin.getCurrentText(player, renameTextField, (newName) -> {
+        final String trimmedName = newName.trim();
+        if (trimmedName.isEmpty()) {
+            plugin.showMessage(player, "Name cannot be empty!", 5.0f);
+            return;
+        }
+
+        Vector3i chunk = player.getChunkPosition();
+        plugin.getTaskQueue().queueTask(
+            () -> {
+                try {
+                    LandClaim.ClaimedArea area = plugin.getClaimedAreaAt(chunk);
+                    if (area != null && area.playerUID.equals(player.getUID())) {
+                        plugin.renameArea(chunk, trimmedName);
+                        player.setAttribute("renameResult", "Area renamed to " + trimmedName + "!");
+                    } else {
+                        player.setAttribute("renameResult", "Error: Cannot rename this area!");
+                    }
+                } catch (SQLException e) {
+                    player.setAttribute("renameResult", "Error: " + e.getMessage());
+                }
+            },
+            () -> {
+                plugin.showMessage(player, (String) player.getAttribute("renameResult"), 5.0f);
+                renameMenu.setVisible(false);
+                updateInfoLabel();
+                updateAreaVisibility();
+                // Update the area name display immediately after renaming
+                plugin.updateAreaInfoLabel(player, chunk);
+                System.out.println("[PlayerUIMenu] Updated area info label after renaming for " + player.getName() + " at chunk " + chunk);
+            }
+        );
+    });
+}
+
     public UILabel getClaimButton() { return claimButton; }
     public UILabel getUnclaimButton() { return removeButton; }
     public UILabel getExitButton() { return exitButton; }
@@ -479,4 +576,7 @@ public class PlayerUIMenu {
     public UILabel getShowAllAreasLabel() { return showAllAreasLabel; }
     public UILabel getSettingsExitButton() { return settingsExitButton; }
     public UILabel getBuyAreaButton() { return buyAreaButton; }
+    public UILabel getChangeAreaNameButton() { return changeAreaNameButton; }
+    public UILabel getRenameButton() { return renameButton; }
+    public UILabel getCancelRenameButton() { return cancelRenameButton; } // Added getter
 }

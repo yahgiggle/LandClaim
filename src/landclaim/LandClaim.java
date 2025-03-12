@@ -12,6 +12,7 @@ import net.risingworld.api.events.player.PlayerEnterChunkEvent;
 import net.risingworld.api.events.player.PlayerKeyEvent;
 import net.risingworld.api.objects.Player;
 import net.risingworld.api.ui.UILabel;
+import net.risingworld.api.ui.UITextField;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
 import net.risingworld.api.utils.Vector3f;
@@ -19,6 +20,7 @@ import net.risingworld.api.utils.Vector3i;
 import net.risingworld.api.utils.Key;
 import net.risingworld.api.objects.Area;
 import net.risingworld.api.worldelements.Area3D;
+import net.risingworld.api.callbacks.Callback;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -50,7 +52,7 @@ public class LandClaim extends Plugin implements Listener {
 
     class TempClaim {
         Area3D visual;
-        long creationTime; // ms since epoch
+        long creationTime;
         TempClaim(Area3D visual, long creationTime) {
             this.visual = visual;
             this.creationTime = creationTime;
@@ -65,9 +67,25 @@ public class LandClaim extends Plugin implements Listener {
         return taskQueue;
     }
 
-    // New getter for tempClaimVisuals
     public List<TempClaim> getTempClaims(Player player) {
         return tempClaimVisuals.get(player);
+    }
+
+    public void getCurrentText(Player player, UITextField textField, Callback<String> callback) {
+        textField.getCurrentText(player, callback);
+    }
+
+    public void renameArea(Vector3i chunk, String newName) throws SQLException {
+        ClaimedArea area = claimedAreasByChunk.get(chunk);
+        if (area != null) {
+            area.areaName = newName;
+            database.getDb().executeUpdate(
+                "UPDATE `Areas` SET AreaName = '" + escapeSql(newName) + "' " +
+                "WHERE AreaX = " + chunk.x + " AND AreaY = " + chunk.y + " AND AreaZ = " + chunk.z + 
+                " AND PlayerUID = '" + escapeSql(area.playerUID) + "'"
+            );
+            System.out.println("[LandClaim] Renamed area at " + chunk + " to " + newName);
+        }
     }
 
     @Override
@@ -157,6 +175,7 @@ public class LandClaim extends Plugin implements Listener {
             adminUIMenu.showAdminMenu(player);
         }
 
+        // First task: Initialize player points and check areasLoaded
         taskQueue.queueTask(
             () -> {
                 try {
@@ -173,35 +192,41 @@ public class LandClaim extends Plugin implements Listener {
 
                     int areaCount = getPlayerAreaCountFromDB(uid);
                     if (areaCount == 0) database.setMaxAreaAllocation(uid, 2);
+
+                    // Load claimed areas if not already loaded
+                    if (!areasLoaded) {
+                        loadClaimedAreas();
+                        areasLoaded = true;
+                    }
                 } catch (SQLException e) {
                     System.out.println("[LandClaim] Error in player connect DB task: " + e.getMessage());
                 }
             },
             () -> {
-                addAreaInfoLabel(player);
-                updateAreaInfoLabel(player, initialChunk);
-                myAreasVisible.put(player, false);
-                allAreasVisible.put(player, true);
-                isShowingAreas.put(player, false);
-                if (!areasLoaded) {
-                    try {
-                        loadClaimedAreas();
-                        areasLoaded = true;
-                    } catch (SQLException e) {
-                        System.out.println("[LandClaim] Failed to load areas: " + e.getMessage());
-                    }
-                }
-                menu.updateVisibleAreas(initialChunk);
-                menu.updateAreaVisibility();
-                showAreasOnConnect(player);
+                // Second task: Update UI and visuals after areas are loaded
+                taskQueue.queueTask(
+                    () -> {
+                        // This ensures we're on the main thread for UI updates
+                    },
+                    () -> {
+                        addAreaInfoLabel(player);
+                        updateAreaInfoLabel(player, initialChunk);
+                        myAreasVisible.put(player, false);
+                        allAreasVisible.put(player, true);
+                        isShowingAreas.put(player, false);
+                        menu.updateVisibleAreas(initialChunk);
+                        menu.updateAreaVisibility();
+                        showAreasOnConnect(player);
 
-                new Timer(60.0f, 0f, 0, () -> {
-                    PlayerUIMenu currentMenu = playerMenus.get(player);
-                    if (currentMenu != null) {
-                        currentMenu.disableAllAreas();
-                        allAreasVisible.put(player, false);
+                        new Timer(60.0f, 0f, 0, () -> {
+                            PlayerUIMenu currentMenu = playerMenus.get(player);
+                            if (currentMenu != null) {
+                                currentMenu.disableAllAreas();
+                                allAreasVisible.put(player, false);
+                            }
+                        }).start();
                     }
-                }).start();
+                );
             }
         );
     }
@@ -671,13 +696,16 @@ public class LandClaim extends Plugin implements Listener {
         player.setAttribute("messageLabel", messageLabel);
     }
 
-    private void updateAreaInfoLabel(Player player, Vector3i chunk) {
-        UILabel label = (UILabel) player.getAttribute("areaInfoLabel");
-        if (label != null) {
-            ClaimedArea area = claimedAreasByChunk.get(chunk);
-            label.setText(area != null ? area.areaName : "Area Unclaimed");
-        }
+   public void updateAreaInfoLabel(Player player, Vector3i chunk) { // Changed from private to public
+    UILabel label = (UILabel) player.getAttribute("areaInfoLabel");
+    if (label != null) {
+        ClaimedArea area = claimedAreasByChunk.get(chunk);
+        System.out.println("[LandClaim] Updating area info label for " + player.getName() + " at chunk " + chunk + 
+                           ". Found area: " + (area != null ? area.areaName : "null") + 
+                           ", Total areas loaded: " + claimedAreasByChunk.size());
+        label.setText(area != null ? area.areaName : "Area Unclaimed");
     }
+}
 
     public void showMessage(Player player, String message, float duration) {
         UILabel messageLabel = (UILabel) player.getAttribute("messageLabel");
