@@ -41,10 +41,10 @@ public class PlayerOnClickButtons implements Listener {
         System.out.println("[PlayerOnClickButtons] Clicked element: " + element.getText() + " for " + player.getName());
 
         if (element == tools.getClaimButton()) {
-            player.sendTextMessage("Claiming area...");
+            plugin.showMessage(player, "Claiming area...", 5.0f);
             plugin.startClaimMode(player);
         } else if (element == tools.getUnclaimButton()) {
-            player.sendTextMessage("Unclaiming area...");
+            plugin.showMessage(player, "Unclaiming area...", 5.0f);
             plugin.unclaimArea(player);
         } else if (element == tools.getExitButton()) {
             menu.closeMenu();
@@ -52,18 +52,18 @@ public class PlayerOnClickButtons implements Listener {
             try {
                 menu.showSettingsMenu();
             } catch (SQLException e) {
-                player.sendTextMessage("Error opening settings: " + e.getMessage());
+                plugin.showMessage(player, "Error opening settings: " + e.getMessage(), 5.0f);
             }
         } else if (element == menu.getSettingsExitButton()) {
             System.out.println("[PlayerOnClickButtons] Settings exit clicked for " + player.getName());
-            menu.closeSettingsMenu(); // This line (59) assumes closeSettingsMenu exists
+            menu.closeSettingsMenu();
         } else if (element == menu.getShowMyAreasLabel()) {
             menu.toggleMyAreas();
         } else if (element == menu.getShowAllAreasLabel()) {
             menu.toggleAllAreas();
         } else if (element == menu.getBuyAreaButton()) {
             System.out.println("[PlayerOnClickButtons] Buy Area clicked for " + player.getName());
-            player.sendTextMessage("Updating points and processing purchase...");
+            plugin.showMessage(player, "Updating points and processing purchase...", 5.0f);
             plugin.buyAreaAllocation(player);
         } else if (element == player.getAttribute("nextPlayerButton")) {
             menu.nextPlayer();

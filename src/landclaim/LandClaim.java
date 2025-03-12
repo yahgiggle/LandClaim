@@ -23,7 +23,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.ArrayList;
-// fork test
+
 public class LandClaim extends Plugin implements Listener {
     private LandClaimDatabase database;
     private AdminTools adminTools;
@@ -43,6 +43,9 @@ public class LandClaim extends Plugin implements Listener {
 
     private HashMap<Player, Boolean> myAreasVisible = new HashMap<>();
     private HashMap<Player, Boolean> allAreasVisible = new HashMap<>();
+    private HashMap<Player, Boolean> isShowingAreas = new HashMap<>();
+    HashMap<Player, Area3D> tempClaimVisuals = new HashMap<>(); // New: Track temporary claim visuals
+    HashMap<Player, Timer> tempClaimTimers = new HashMap<>();   // New: Track timers for temp visuals
 
     public HashMap<Player, PlayerTools> getPlayerTools() {
         return playerTools;
@@ -81,6 +84,15 @@ public class LandClaim extends Plugin implements Listener {
         System.out.println("-- LandClaim PLUGIN DISABLED --");
         if (database != null) database.close();
         taskQueue.shutdown();
+        // Clean up temporary visuals and timers
+        for (Player player : tempClaimTimers.keySet()) {
+            Timer timer = tempClaimTimers.get(player);
+            if (timer != null) timer.kill();
+            Area3D visual = tempClaimVisuals.get(player);
+            if (visual != null && player.isConnected()) player.removeGameObject(visual);
+        }
+        tempClaimTimers.clear();
+        tempClaimVisuals.clear();
     }
 
     @EventMethod
@@ -127,6 +139,7 @@ public class LandClaim extends Plugin implements Listener {
                 updateAreaInfoLabel(player, initialChunk);
                 myAreasVisible.put(player, false);
                 allAreasVisible.put(player, true);
+                isShowingAreas.put(player, false);
                 if (!areasLoaded) {
                     try {
                         loadClaimedAreas();
@@ -188,11 +201,17 @@ public class LandClaim extends Plugin implements Listener {
                 int maxAreaAllocation = (Integer) player.getAttribute("maxAreaAllocation");
                 int pointsEarnedAdjust = (Integer) player.getAttribute("pointsEarnedAdjust");
                 int areaCostAdjust = (Integer) player.getAttribute("areaCostAdjust");
-                player.sendTextMessage("Total playtime: " + String.format("%.3f", totalHours) + " hours, " +
-                                       "Points: " + points + ", Max Areas: " + maxAreaAllocation + ", " +
-                                       "Points/Hour: " + pointsEarnedAdjust + ", Area Cost: " + areaCostAdjust);
+                showMessage(player, "Total playtime: " + String.format("%.3f", totalHours) + " hours, " +
+                                    "Points: " + points + ", Max Areas: " + maxAreaAllocation + ", " +
+                                    "Points/Hour: " + pointsEarnedAdjust + ", Area Cost: " + areaCostAdjust, 15.0f);
             }
         );
+        isShowingAreas.remove(player);
+        // Clean up temporary visual and timer
+        Timer timer = tempClaimTimers.remove(player);
+        if (timer != null) timer.kill();
+        Area3D visual = tempClaimVisuals.remove(player);
+        if (visual != null && player.isConnected()) player.removeGameObject(visual);
     }
 
     @EventMethod
@@ -229,11 +248,11 @@ public class LandClaim extends Plugin implements Listener {
         if (args[0].equalsIgnoreCase("/showareas")) {
             boolean show = args.length > 1 ? Boolean.parseBoolean(args[1]) : true;
             if (show) showAreas(player); else hideAreas(player);
-            player.sendTextMessage("Area visuals " + (show ? "shown" : "hidden") + ".");
+            showMessage(player, "Area visuals " + (show ? "shown" : "hidden") + ".", 60.0f);
             event.setCancelled(true);
         } else if (args[0].equalsIgnoreCase("/admin")) {
             if (args.length < 2) {
-                player.sendTextMessage("Usage: /admin [points|cost|alloc] [+|-]");
+                showMessage(player, "Usage: /admin [points|cost|alloc] [+|-]", 15.0f);
                 event.setCancelled(true);
                 return;
             }
@@ -286,7 +305,7 @@ public class LandClaim extends Plugin implements Listener {
                         player.setAttribute("adminResult", "Error: " + e.getMessage());
                     }
                 },
-                () -> player.sendTextMessage((String) player.getAttribute("adminResult"))
+                () -> showMessage(player, (String) player.getAttribute("adminResult"), 15.0f)
             );
             event.setCancelled(true);
         }
@@ -299,7 +318,7 @@ public class LandClaim extends Plugin implements Listener {
     public void startClaimMode(Player player) {
         Vector3i chunk = playerChunks.get(player);
         if (chunk == null) {
-            player.sendTextMessage("Error: No chunk data!");
+            showMessage(player, "Error: No chunk data!", 15.0f);
             return;
         }
 
@@ -334,12 +353,34 @@ public class LandClaim extends Plugin implements Listener {
                 if (result instanceof ClaimedArea) {
                     ClaimedArea area = (ClaimedArea) result;
                     claimedAreasByChunk.put(chunk, area);
-                    addAreaVisual(chunk.x, chunk.y, chunk.z, area.areaName, area.playerUID, true, player);
-                    player.sendTextMessage("Claimed " + area.areaName + "!");
+                    Area3D newVisual = addAreaVisual(chunk.x, chunk.y, chunk.z, area.areaName, area.playerUID, true, player);
+                    newVisual.setAlwaysVisible(true); // Set as a fallback
+                    showMessage(player, "Claimed " + area.areaName + "!", 15.0f);
                     updateAreaInfoLabel(player, chunk);
-                    showAreas(player);
+                    if (isShowingAreas.getOrDefault(player, false)) {
+                        showMessage(player, "Please wait before claiming again!", 15.0f);
+                        player.removeGameObject(newVisual);
+                        newVisual.setAlwaysVisible(false);
+                        return;
+                    }
+                    // Store the new visual and timer
+                    Area3D oldVisual = tempClaimVisuals.remove(player);
+                    if (oldVisual != null) player.removeGameObject(oldVisual);
+                    Timer oldTimer = tempClaimTimers.remove(player);
+                    if (oldTimer != null) oldTimer.kill();
+                    tempClaimVisuals.put(player, newVisual);
+                    Timer timer = new Timer(60.0f, 0f, 0, () -> {
+                        player.removeGameObject(newVisual);
+                        newVisual.setAlwaysVisible(false);
+                        tempClaimVisuals.remove(player);
+                        tempClaimTimers.remove(player);
+                    });
+                    tempClaimTimers.put(player, timer);
+                    timer.start();
+                    PlayerUIMenu menu = playerMenus.get(player);
+                    if (menu != null) menu.updateAreaVisibility(); // Refresh visibility immediately
                 } else {
-                    player.sendTextMessage((String) result);
+                    showMessage(player, (String) result, 15.0f);
                 }
             }
         );
@@ -348,7 +389,7 @@ public class LandClaim extends Plugin implements Listener {
     public void unclaimArea(Player player) {
         Vector3i chunk = playerChunks.get(player);
         if (chunk == null) {
-            player.sendYellMessage("Error: No chunk data!", 3, true);
+            showMessage(player, "Error: No chunk data!", 15.0f);
             return;
         }
 
@@ -374,12 +415,13 @@ public class LandClaim extends Plugin implements Listener {
                 Object result = player.getAttribute("unclaimResult");
                 if (result instanceof ClaimedArea) {
                     claimedAreasByChunk.remove(chunk);
-                    removeAreaVisual(chunk.x, chunk.y, chunk.z, player.getUID());
-                    player.sendYellMessage("Area unclaimed!", 3, true);
+                    removeAreaVisual(chunk.x, chunk.y, chunk.z, player.getUID(), player);
+                    showMessage(player, "Area unclaimed!", 15.0f);
                     updateAreaInfoLabel(player, chunk);
-                    showAreas(player);
+                    PlayerUIMenu menu = playerMenus.get(player);
+                    if (menu != null) menu.updateAreaVisibility(); // Refresh visibility
                 } else {
-                    player.sendYellMessage((String) result, 3, true);
+                    showMessage(player, (String) result, 15.0f);
                 }
             }
         );
@@ -399,7 +441,6 @@ public class LandClaim extends Plugin implements Listener {
                     double sessionHours = sessionMs / 3600000.0;
                     System.out.println("[LandClaim] Buy clicked for " + player.getName() + ", session time: " + sessionHours + " hours");
 
-                    // Update playtime and points for this session
                     database.updatePlaytimeAndPoints(uid, sessionHours);
 
                     int areaCost = database.getAreaCostAdjust();
@@ -413,7 +454,6 @@ public class LandClaim extends Plugin implements Listener {
                         return;
                     }
 
-                    // Calculate hours to deduct based on points spent
                     double hoursToDeduct = (double) areaCost / pointsEarnedAdjust;
                     if (currentHours < hoursToDeduct) {
                         player.setAttribute("buyResult", "Not enough playtime hours! Need " + hoursToDeduct + ", have " + currentHours);
@@ -421,7 +461,6 @@ public class LandClaim extends Plugin implements Listener {
                         return;
                     }
 
-                    // Deduct points and hours using database methods
                     database.deductPoints(uid, areaCost);
                     database.deductHours(uid, hoursToDeduct);
 
@@ -439,10 +478,10 @@ public class LandClaim extends Plugin implements Listener {
                 }
             },
             () -> {
-                player.sendTextMessage((String) player.getAttribute("buyResult"));
+                showMessage(player, (String) player.getAttribute("buyResult"), 15.0f);
                 PlayerUIMenu menu = playerMenus.get(player);
                 if (menu != null) {
-                    menu.updateBuyAreaButtonText(); // Refresh UI after purchase attempt
+                    menu.updateBuyAreaButtonText();
                 }
             }
         );
@@ -463,12 +502,12 @@ public class LandClaim extends Plugin implements Listener {
         System.out.println("[LandClaim] Loaded " + claimedAreasByChunk.size() + " areas.");
     }
 
-    public void addAreaVisual(int x, int y, int z, String name, String uid, boolean isPlayer, Player player) {
+    public Area3D addAreaVisual(int x, int y, int z, String name, String uid, boolean isPlayer, Player player) {
         Vector3i chunk = new Vector3i(x, y, z);
         Vector3f start = getGlobalPosition(chunk, new Vector3i(0, 0, 0));
         Vector3f end = getGlobalPosition(chunk, new Vector3i(32, 64, 32));
         Area3D visual = new Area3D(new Area(start, end));
-        visual.setAlwaysVisible(false);
+        visual.setAlwaysVisible(false); // Default state
         visual.setFrameVisible(true);
 
         if (isPlayer) {
@@ -481,13 +520,20 @@ public class LandClaim extends Plugin implements Listener {
             AllClaimedAreas.add(visual);
         }
         player.addGameObject(visual);
+        return visual;
     }
 
-    private void removeAreaVisual(int x, int y, int z, String uid) {
+    private void removeAreaVisual(int x, int y, int z, String uid, Player player) {
         Vector3i chunk = new Vector3i(x, y, z);
         ArrayList<Area3D> areas = UserClaimedAreas.get(uid);
         if (areas != null) {
-            areas.removeIf(a -> getChunkPosition(a.getArea().getStartPosition()).equals(chunk));
+            areas.removeIf(a -> {
+                if (getChunkPosition(a.getArea().getStartPosition()).equals(chunk)) {
+                    player.removeGameObject(a);
+                    return true;
+                }
+                return false;
+            });
         }
     }
 
@@ -500,7 +546,7 @@ public class LandClaim extends Plugin implements Listener {
             if (Math.abs(areaChunk.x - chunk.x) <= radius &&
                 Math.abs(areaChunk.y - chunk.y) <= radius &&
                 Math.abs(areaChunk.z - chunk.z) <= radius) {
-                player.sendTextMessage("Nearby: " + area.areaName + " by " + area.areaOwnerName);
+                showMessage(player, "Nearby: " + area.areaName + " by " + area.areaOwnerName, 15.0f);
             }
         }
     }
@@ -559,20 +605,35 @@ public class LandClaim extends Plugin implements Listener {
     }
 
     private void addAreaInfoLabel(Player player) {
-        UILabel label = new UILabel();
-        label.setClickable(false);
-        label.setText("Area Unclaimed");
-        label.setFont(Font.Medieval);
-        label.style.textAlign.set(TextAnchor.MiddleCenter);
-        label.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
-        label.setFontSize(16);
-        label.setSize(300, 50, false);
-        label.setBorder(2);
-        label.setBorderColor(999);
-        label.setBackgroundColor(500);
-        label.setPosition(1, 90, true);
-        player.addUIElement(label);
-        player.setAttribute("areaInfoLabel", label);
+        UILabel areaInfoLabel = new UILabel();
+        areaInfoLabel.setClickable(false);
+        areaInfoLabel.setText("");
+        areaInfoLabel.setFont(Font.Medieval);
+        areaInfoLabel.style.textAlign.set(TextAnchor.MiddleCenter);
+        areaInfoLabel.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        areaInfoLabel.setFontSize(22);
+        areaInfoLabel.setSize(400, 40, false);
+        areaInfoLabel.setBorder(2);
+        areaInfoLabel.setBorderColor(1.0f, 1.0f, 1.0f, 0.1f);
+        areaInfoLabel.setBackgroundColor(1.0f, 1.0f, 1.0f, 0.05f);
+        areaInfoLabel.setPosition(5, 1, true);
+        player.addUIElement(areaInfoLabel);
+        player.setAttribute("areaInfoLabel", areaInfoLabel);
+
+        UILabel messageLabel = new UILabel();
+        messageLabel.setClickable(false);
+        messageLabel.setText("");
+        messageLabel.setFont(Font.Medieval);
+        messageLabel.style.textAlign.set(TextAnchor.MiddleCenter);
+        messageLabel.setFontColor(9.0f, 9.0f, 9.0f, 1.0f);
+        messageLabel.setFontSize(22);
+        messageLabel.setSize(1000, 40, false);
+        messageLabel.setBorder(2);
+        messageLabel.setBorderColor(1.0f, 1.0f, 1.0f, 0.1f);
+        messageLabel.setBackgroundColor(1.0f, 1.0f, 1.0f, 0.05f);
+        messageLabel.setPosition(30, 1, true);
+        player.addUIElement(messageLabel);
+        player.setAttribute("messageLabel", messageLabel);
     }
 
     private void updateAreaInfoLabel(Player player, Vector3i chunk) {
@@ -580,6 +641,18 @@ public class LandClaim extends Plugin implements Listener {
         if (label != null) {
             ClaimedArea area = claimedAreasByChunk.get(chunk);
             label.setText(area != null ? area.areaName : "Area Unclaimed");
+        }
+    }
+
+    public void showMessage(Player player, String message, float duration) {
+        UILabel messageLabel = (UILabel) player.getAttribute("messageLabel");
+        if (messageLabel != null) {
+            messageLabel.setText(message);
+            new Timer(duration, 0f, 0, () -> {
+                if (messageLabel.getText().equals(message)) {
+                    messageLabel.setText("");
+                }
+            }).start();
         }
     }
 

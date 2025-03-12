@@ -7,6 +7,8 @@ import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
 import net.risingworld.api.utils.Vector3i;
+import net.risingworld.api.worldelements.Area3D; // Added import for Area3D
+import net.risingworld.api.Timer;           // Added import for Timer
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -181,16 +183,16 @@ public class PlayerUIMenu {
         Vector3i chunk = player.getChunkPosition();
         LandClaim.ClaimedArea area = plugin.getClaimedAreaAt(chunk);
         if (area == null) {
-            player.sendYellMessage("Area not claimed!", 3, true);
+            plugin.showMessage(player, "Area not claimed!", 5.0f);
             return;
         }
         if (!area.playerUID.equals(player.getUID())) {
-            player.sendYellMessage("Only edit your own areas!", 3, true);
+            plugin.showMessage(player, "Only edit your own areas!", 5.0f);
             return;
         }
         currentAreaId = plugin.getDatabase().getAreaIdFromCoords(chunk.x, chunk.y, chunk.z);
         if (currentAreaId == -1) {
-            player.sendYellMessage("Error: Area ID not found!", 3, true);
+            plugin.showMessage(player, "Error: Area ID not found!", 5.0f);
             return;
         }
         updatePermissionButtons();
@@ -218,7 +220,7 @@ public class PlayerUIMenu {
 
     public void togglePermission(String permission) {
         if (currentAreaId == -1 || !plugin.getClaimedAreaAt(player.getChunkPosition()).playerUID.equals(player.getUID())) {
-            player.sendYellMessage("Invalid area or permissions!", 3, true);
+            plugin.showMessage(player, "Invalid area or permissions!", 5.0f);
             return;
         }
         plugin.getTaskQueue().queueTask(
@@ -238,9 +240,9 @@ public class PlayerUIMenu {
                     UILabel button = permissionButtons.get(permission);
                     String name = button.getText().replace("<b>", "").replace(": Off", "").replace(": On", "").trim();
                     button.setText("<b>" + name + ": " + (newState ? "On" : "Off") + "</b>");
-                    player.sendTextMessage(name + " set to: " + (newState ? "On" : "Off"));
+                    plugin.showMessage(player, name + " set to: " + (newState ? "On" : "Off"), 5.0f);
                 } else {
-                    player.sendTextMessage((String) result);
+                    plugin.showMessage(player, (String) result, 5.0f);
                 }
             }
         );
@@ -293,7 +295,7 @@ public class PlayerUIMenu {
         if (showingMyAreas) showingAllAreas = false;
         updateAreaVisibility();
         updateLabels();
-        player.sendTextMessage("My Areas: " + (showingMyAreas ? "On" : "Off"));
+        plugin.showMessage(player, "My Areas: " + (showingMyAreas ? "On" : "Off"), 5.0f);
         System.out.println("[PlayerUIMenu] Toggle My Areas: " + showingMyAreas + " for " + player.getName());
     }
 
@@ -302,7 +304,7 @@ public class PlayerUIMenu {
         if (showingAllAreas) showingMyAreas = false;
         updateAreaVisibility();
         updateLabels();
-        player.sendTextMessage("All Areas: " + (showingAllAreas ? "On" : "Off"));
+        plugin.showMessage(player, "All Areas: " + (showingAllAreas ? "On" : "Off"), 5.0f);
         System.out.println("[PlayerUIMenu] Toggle All Areas: " + showingAllAreas + " for " + player.getName());
     }
 
@@ -310,7 +312,7 @@ public class PlayerUIMenu {
         showingAllAreas = false;
         updateAreaVisibility();
         updateLabels();
-        player.sendTextMessage("All Areas: Off (auto-disabled after 60s)");
+        plugin.showMessage(player, "All Areas: Off (auto-disabled after 60s)", 5.0f);
         System.out.println("[PlayerUIMenu] Auto-disabled All Areas for " + player.getName());
     }
 
@@ -372,6 +374,14 @@ public class PlayerUIMenu {
                 plugin.addAreaVisual(area.areaX, area.areaY, area.areaZ, area.areaName, area.playerUID, 
                                      area.playerUID.equals(uid), player));
         }
+
+        // Ensure temporary claim visual stays visible
+        Area3D tempVisual = plugin.tempClaimVisuals.get(player);
+        Timer tempTimer = plugin.tempClaimTimers.get(player);
+        if (tempVisual != null && tempTimer != null && tempTimer.isActive()) {
+            player.addGameObject(tempVisual);
+        }
+
         System.out.println("[PlayerUIMenu] Updated visibility for " + player.getName() + 
                            ": My Areas=" + showingMyAreas + ", All Areas=" + showingAllAreas);
     }
@@ -413,7 +423,7 @@ public class PlayerUIMenu {
                 }
             },
             () -> {
-                player.sendYellMessage((String) player.getAttribute("guestResult"), 3, true);
+                plugin.showMessage(player, (String) player.getAttribute("guestResult"), 5.0f);
                 updateInfoLabel();
             }
         );
@@ -444,7 +454,7 @@ public class PlayerUIMenu {
                 }
             },
             () -> {
-                player.sendYellMessage((String) player.getAttribute("guestResult"), 3, true);
+                plugin.showMessage(player, (String) player.getAttribute("guestResult"), 5.0f);
                 updateInfoLabel();
             }
         );
@@ -452,7 +462,7 @@ public class PlayerUIMenu {
 
     private boolean validateGuestAction(LandClaim.ClaimedArea area) {
         if (area == null || !area.playerUID.equals(player.getUID()) || currentPlayerIndex == -1 || worldPlayers.isEmpty()) {
-            player.sendYellMessage("Invalid area or no player selected!", 3, true);
+            plugin.showMessage(player, "Invalid area or no player selected!", 5.0f);
             return false;
         }
         return true;

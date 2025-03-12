@@ -102,7 +102,7 @@ public class OwnerEventHandler implements Listener {
     private void checkAndCancel(Player player, Vector3i chunkPos, Vector3f blockPos, String permission, String action, Object event) {
         LandClaim.ClaimedArea claim = getClaimAt(chunkPos);
         if (claim != null && !hasPermission(player, claim, permission)) {
-            player.sendYellMessage("You can’t " + action + " in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
+            plugin.showMessage(player, "You can’t " + action + " in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 5.0f);
             if (event instanceof net.risingworld.api.events.Cancellable) {
                 ((net.risingworld.api.events.Cancellable) event).setCancelled(true);
             }
@@ -112,7 +112,7 @@ public class OwnerEventHandler implements Listener {
     @EventMethod
     public void onPlayerConnect(PlayerConnectEvent event) {
         Player player = event.getPlayer();
-        player.sendYellMessage("LandClaim: Protection active!", 3, true);
+        plugin.showMessage(player, "LandClaim: Protection active!", 5.0f);
     }
 
     @EventMethod
@@ -121,8 +121,8 @@ public class OwnerEventHandler implements Listener {
         Vector3i chunkPos = event.getNewChunkCoordinates();
         Vector3f playerPos = event.getNewPlayerPosition();
         LandClaim.ClaimedArea claim = getClaimAt(chunkPos);
-        player.sendYellMessage(claim != null ? "Entered claimed area: " + claim.areaName + " owned by " + claim.areaOwnerName :
-            "Entered unclaimed area", 3, true);
+        plugin.showMessage(player, claim != null ? "Entered claimed area: " + claim.areaName + " owned by " + claim.areaOwnerName :
+                           "Entered unclaimed area", 15.0f);
     }
 
     @EventMethod
@@ -131,7 +131,7 @@ public class OwnerEventHandler implements Listener {
         Vector3i chunkPos = player.getChunkPosition();
         LandClaim.ClaimedArea claim = getClaimAt(chunkPos);
         if (claim != null && !isGuest(player, claim) && !claim.playerUID.equals(player.getUID())) {
-            player.sendYellMessage("You spawned in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 3, true);
+            plugin.showMessage(player, "You spawned in " + claim.areaName + " owned by " + claim.areaOwnerName + "!", 5.0f);
         }
     }
 
