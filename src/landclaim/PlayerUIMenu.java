@@ -7,8 +7,8 @@ import net.risingworld.api.ui.UILabel;
 import net.risingworld.api.ui.style.Font;
 import net.risingworld.api.ui.style.TextAnchor;
 import net.risingworld.api.utils.Vector3i;
-import net.risingworld.api.worldelements.Area3D; // Added import for Area3D
-import net.risingworld.api.Timer;           // Added import for Timer
+import net.risingworld.api.worldelements.Area3D;
+import net.risingworld.api.Timer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -25,43 +25,42 @@ public class PlayerUIMenu {
     private UILabel showMyAreasLabel, showAllAreasLabel, infoLabel;
     private UILabel nextPlayerButton, backPlayerButton, addGuestButton, removeGuestButton;
     private UILabel buyAreaButton;
-    private boolean isVisible, showingMyAreas = false, showingAllAreas = true; // Default to true for connect
+    private boolean isVisible, showingMyAreas = false, showingAllAreas = true;
     private List<Player> worldPlayers = new ArrayList<>();
     private int currentPlayerIndex = -1, currentAreaId = -1;
     final Map<String, UILabel> permissionButtons = new HashMap<>();
-    private Map<Vector3i, LandClaim.ClaimedArea> visibleAreas = new HashMap<>(); // Tracks areas in 5-chunk radius
+    private Map<Vector3i, LandClaim.ClaimedArea> visibleAreas = new HashMap<>();
 
     public PlayerUIMenu(Player player, LandClaim plugin) {
         this.player = player;
         this.plugin = plugin;
         setupBaseMenu();
         setupSettingsMenu();
-        updateVisibleAreas(player.getChunkPosition()); // Initial area load
-        updateLabels(); // Reflect initial "Show All Areas" state
+        updateVisibleAreas(player.getChunkPosition());
+        updateLabels();
     }
 
     private void setupBaseMenu() {
         menuBase = new UIElement();
         player.addUIElement(menuBase);
-        menuBase.setSize(276, 370, false); // Increased height to accommodate new button
+        menuBase.setSize(276, 370, false);
         menuBase.setClickable(false);
         menuBase.setPosition(45, 45, true);
         menuBase.setBorderEdgeRadius(5.0f, false);
         menuBase.setBorder(3);
         menuBase.setBorderColor(888);
-        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f);
+        menuBase.setBackgroundColor(0.1f, 0.1f, 0.1f, 0.9f); // Fixed as per your correction
         menuBase.setVisible(false);
 
         claimButton = createButton(menuBase, 10, 10, "Claim Area", 250, 45);
         removeButton = createButton(menuBase, 10, 60, "Remove Area", 250, 45);
         showMyAreasLabel = createButton(menuBase, 10, 110, "Show My Areas\nOff", 250, 45);
-        showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45); // Initial state On
-        exitButton = createButton(menuBase, 10, 310, "Exit", 250, 45); // exit button
+        showAllAreasLabel = createButton(menuBase, 10, 160, "Show All Areas\nOn", 250, 45);
+        exitButton = createButton(menuBase, 10, 310, "Exit", 250, 45);
         settingsButton = createButton(menuBase, 10, 260, "Settings", 250, 45);
         
-        // Initial buyAreaButton setup
         updateBuyAreaButtonText();
-        buyAreaButton = createButton(menuBase, 10, 210, getBuyAreaButtonText(), 250, 45);  // buy button
+        buyAreaButton = createButton(menuBase, 10, 210, getBuyAreaButtonText(), 250, 45);
     }
 
     private void setupSettingsMenu() {
@@ -251,7 +250,7 @@ public class PlayerUIMenu {
     public void closeSettingsMenu() {
         settingsMenu.setVisible(false);
         menuBase.setVisible(true);
-        player.setMouseCursorVisible(true); // Keep cursor visible for base menu
+        player.setMouseCursorVisible(true);
         System.out.println("[PlayerUIMenu] Closing settings menu for " + player.getName());
     }
 
@@ -260,7 +259,6 @@ public class PlayerUIMenu {
         menuBase.setVisible(isVisible);
         player.setMouseCursorVisible(isVisible);
         if (isVisible) {
-            // Update playtime and points when menu opens
             plugin.getTaskQueue().queueTask(
                 () -> {
                     try {
@@ -274,11 +272,12 @@ public class PlayerUIMenu {
                         }
                     } catch (SQLException e) {
                         System.out.println("[PlayerUIMenu] Error updating playtime on menu open: " + e.getMessage());
+                        e.printStackTrace();
                     }
                 },
                 () -> {
-                    updateBuyAreaButtonText(); // Refresh points display after update
-                    updateAreaVisibility(); // Refresh visibility when menu opens
+                    updateBuyAreaButtonText();
+                    updateAreaVisibility();
                 }
             );
         }
@@ -361,7 +360,7 @@ public class PlayerUIMenu {
     }
 
     public void updateAreaVisibility() {
-        plugin.hideAreas(player); // Clear existing visuals
+        plugin.hideAreas(player);
         String uid = player.getUID();
 
         if (showingMyAreas) {
@@ -375,11 +374,15 @@ public class PlayerUIMenu {
                                      area.playerUID.equals(uid), player));
         }
 
-        // Ensure temporary claim visual stays visible
-        Area3D tempVisual = plugin.tempClaimVisuals.get(player);
-        Timer tempTimer = plugin.tempClaimTimers.get(player);
-        if (tempVisual != null && tempTimer != null && tempTimer.isActive()) {
-            player.addGameObject(tempVisual);
+        // Updated to use the getter
+        List<LandClaim.TempClaim> tempClaims = plugin.getTempClaims(player);
+        if (tempClaims != null) {
+            long now = System.currentTimeMillis();
+            for (LandClaim.TempClaim tempClaim : tempClaims) {
+                if (now - tempClaim.creationTime < 60000) {
+                    player.addGameObject(tempClaim.visual);
+                }
+            }
         }
 
         System.out.println("[PlayerUIMenu] Updated visibility for " + player.getName() + 

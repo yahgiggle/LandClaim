@@ -23,6 +23,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.List;
 
 public class LandClaim extends Plugin implements Listener {
     private LandClaimDatabase database;
@@ -44,8 +45,17 @@ public class LandClaim extends Plugin implements Listener {
     private HashMap<Player, Boolean> myAreasVisible = new HashMap<>();
     private HashMap<Player, Boolean> allAreasVisible = new HashMap<>();
     private HashMap<Player, Boolean> isShowingAreas = new HashMap<>();
-    HashMap<Player, Area3D> tempClaimVisuals = new HashMap<>(); // New: Track temporary claim visuals
-    HashMap<Player, Timer> tempClaimTimers = new HashMap<>();   // New: Track timers for temp visuals
+    private HashMap<Player, List<TempClaim>> tempClaimVisuals = new HashMap<>();
+    private Timer claimCleanupTimer;
+
+    class TempClaim {
+        Area3D visual;
+        long creationTime; // ms since epoch
+        TempClaim(Area3D visual, long creationTime) {
+            this.visual = visual;
+            this.creationTime = creationTime;
+        }
+    }
 
     public HashMap<Player, PlayerTools> getPlayerTools() {
         return playerTools;
@@ -53,6 +63,11 @@ public class LandClaim extends Plugin implements Listener {
 
     public DatabaseTaskQueue getTaskQueue() {
         return taskQueue;
+    }
+
+    // New getter for tempClaimVisuals
+    public List<TempClaim> getTempClaims(Player player) {
+        return tempClaimVisuals.get(player);
     }
 
     @Override
@@ -77,6 +92,29 @@ public class LandClaim extends Plugin implements Listener {
         areasLoaded = false;
         System.out.println("[LandClaim] Initialized and listeners registered.");
         System.out.println("[LandClaim] Points system initialized.");
+
+        claimCleanupTimer = new Timer(1.0f, 0f, 0, () -> {
+            long now = System.currentTimeMillis();
+            for (Player player : tempClaimVisuals.keySet()) {
+                List<TempClaim> claims = tempClaimVisuals.get(player);
+                if (claims != null) {
+                    claims.removeIf(claim -> {
+                        if (now - claim.creationTime >= 60000) {
+                            if (player.isConnected()) {
+                                player.removeGameObject(claim.visual);
+                            }
+                            claim.visual.setAlwaysVisible(false);
+                            return true;
+                        }
+                        return false;
+                    });
+                    if (claims.isEmpty()) {
+                        tempClaimVisuals.remove(player);
+                    }
+                }
+            }
+        });
+        claimCleanupTimer.start();
     }
 
     @Override
@@ -84,15 +122,20 @@ public class LandClaim extends Plugin implements Listener {
         System.out.println("-- LandClaim PLUGIN DISABLED --");
         if (database != null) database.close();
         taskQueue.shutdown();
-        // Clean up temporary visuals and timers
-        for (Player player : tempClaimTimers.keySet()) {
-            Timer timer = tempClaimTimers.get(player);
-            if (timer != null) timer.kill();
-            Area3D visual = tempClaimVisuals.get(player);
-            if (visual != null && player.isConnected()) player.removeGameObject(visual);
+        for (Player player : tempClaimVisuals.keySet()) {
+            List<TempClaim> claims = tempClaimVisuals.get(player);
+            if (claims != null) {
+                for (TempClaim claim : claims) {
+                    if (player.isConnected()) {
+                        player.removeGameObject(claim.visual);
+                    }
+                }
+            }
         }
-        tempClaimTimers.clear();
         tempClaimVisuals.clear();
+        if (claimCleanupTimer != null) {
+            claimCleanupTimer.kill();
+        }
     }
 
     @EventMethod
@@ -207,11 +250,14 @@ public class LandClaim extends Plugin implements Listener {
             }
         );
         isShowingAreas.remove(player);
-        // Clean up temporary visual and timer
-        Timer timer = tempClaimTimers.remove(player);
-        if (timer != null) timer.kill();
-        Area3D visual = tempClaimVisuals.remove(player);
-        if (visual != null && player.isConnected()) player.removeGameObject(visual);
+        List<TempClaim> claims = tempClaimVisuals.remove(player);
+        if (claims != null) {
+            for (TempClaim claim : claims) {
+                if (player.isConnected()) {
+                    player.removeGameObject(claim.visual);
+                }
+            }
+        }
     }
 
     @EventMethod
@@ -354,7 +400,7 @@ public class LandClaim extends Plugin implements Listener {
                     ClaimedArea area = (ClaimedArea) result;
                     claimedAreasByChunk.put(chunk, area);
                     Area3D newVisual = addAreaVisual(chunk.x, chunk.y, chunk.z, area.areaName, area.playerUID, true, player);
-                    newVisual.setAlwaysVisible(true); // Set as a fallback
+                    newVisual.setAlwaysVisible(true);
                     showMessage(player, "Claimed " + area.areaName + "!", 15.0f);
                     updateAreaInfoLabel(player, chunk);
                     if (isShowingAreas.getOrDefault(player, false)) {
@@ -363,22 +409,11 @@ public class LandClaim extends Plugin implements Listener {
                         newVisual.setAlwaysVisible(false);
                         return;
                     }
-                    // Store the new visual and timer
-                    Area3D oldVisual = tempClaimVisuals.remove(player);
-                    if (oldVisual != null) player.removeGameObject(oldVisual);
-                    Timer oldTimer = tempClaimTimers.remove(player);
-                    if (oldTimer != null) oldTimer.kill();
-                    tempClaimVisuals.put(player, newVisual);
-                    Timer timer = new Timer(60.0f, 0f, 0, () -> {
-                        player.removeGameObject(newVisual);
-                        newVisual.setAlwaysVisible(false);
-                        tempClaimVisuals.remove(player);
-                        tempClaimTimers.remove(player);
-                    });
-                    tempClaimTimers.put(player, timer);
-                    timer.start();
+                    List<TempClaim> claims = tempClaimVisuals.computeIfAbsent(player, k -> new ArrayList<>());
+                    TempClaim tempClaim = new TempClaim(newVisual, System.currentTimeMillis());
+                    claims.add(tempClaim);
                     PlayerUIMenu menu = playerMenus.get(player);
-                    if (menu != null) menu.updateAreaVisibility(); // Refresh visibility immediately
+                    if (menu != null) menu.updateAreaVisibility();
                 } else {
                     showMessage(player, (String) result, 15.0f);
                 }
@@ -419,7 +454,7 @@ public class LandClaim extends Plugin implements Listener {
                     showMessage(player, "Area unclaimed!", 15.0f);
                     updateAreaInfoLabel(player, chunk);
                     PlayerUIMenu menu = playerMenus.get(player);
-                    if (menu != null) menu.updateAreaVisibility(); // Refresh visibility
+                    if (menu != null) menu.updateAreaVisibility();
                 } else {
                     showMessage(player, (String) result, 15.0f);
                 }
@@ -507,7 +542,7 @@ public class LandClaim extends Plugin implements Listener {
         Vector3f start = getGlobalPosition(chunk, new Vector3i(0, 0, 0));
         Vector3f end = getGlobalPosition(chunk, new Vector3i(32, 64, 32));
         Area3D visual = new Area3D(new Area(start, end));
-        visual.setAlwaysVisible(false); // Default state
+        visual.setAlwaysVisible(false);
         visual.setFrameVisible(true);
 
         if (isPlayer) {

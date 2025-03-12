@@ -88,3 +88,4 @@ public class PlayerOnClickButtons implements Listener {
         plugin.registerEventListener(this);
     }
 }
+
